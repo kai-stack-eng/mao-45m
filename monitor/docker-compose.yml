@@ -1,0 +1,65 @@
+name: nobeyama-monitor
+
+services:
+  db:
+    image: timescale/timescaledb:latest-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nobeyama}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nobeyama}
+      POSTGRES_DB: ${POSTGRES_DB:-nobeyama}
+    volumes:
+      # named volume: survives `docker compose down`
+      - db-data:/var/lib/postgresql/data
+      # runs only on first initialisation of the volume
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      # only for psql from the same machine; remove to close it off
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nobeyama}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      POSTGRES_USER: ${POSTGRES_USER:-nobeyama}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nobeyama}
+      POSTGRES_DB: ${POSTGRES_DB:-nobeyama}
+    volumes:
+      # dashboards live here; without this they vanish on recreate
+      - grafana-data:/var/lib/grafana
+      
+    ports:
+      # reachable from the other PC on the LAN
+      - "${GRAFANA_PORT:-3000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  collector:
+    build:
+      context: ..
+      dockerfile: monitor/Dockerfile
+    restart: unless-stopped
+    environment:
+      COSMOS_HOST: ${COSMOS_HOST:-host.docker.internal}
+      COSMOS_PORT: ${COSMOS_PORT:-11111}
+      POLL_INTERVAL: ${POLL_INTERVAL:-1.0}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-nobeyama}:${POSTGRES_PASSWORD:-nobeyama}@db:5432/${POSTGRES_DB:-nobeyama}"
+    extra_hosts:
+      # lets the container reach a mock server running on the host
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db-data:
+  grafana-data:
