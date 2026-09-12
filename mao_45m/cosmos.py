@@ -9,21 +9,14 @@ from logging import getLogger
 from socket import AF_INET, SOCK_STREAM, socket
 from zoneinfo import ZoneInfo
 
-
 # dependencies
 from typing_extensions import Self
-
 
 # constants
 ABSMAX_DX = 0.048  # m
 ABSMAX_DZ = 0.024  # m
 LOGGER = getLogger(__name__)
-STATE_FORMAT = re.compile(
-    r"wind:\s+([0-9.+-]+)\s+"
-    r"tmp:\s+([0-9.+-]+)\s+"
-    r"el:\s+([0-9.+-]+)\s+"
-    r"time:\s+([0-9.+-]+)"
-)
+FIELD_FORMAT = re.compile(r"(\w+):\s*([0-9.eE+-]+)")
 SUBREF_DX_FORMAT = re.compile(r"set\s+x\s+([0-9.+-]+)")
 SUBREF_DZ_FORMAT = re.compile(r"set\s+z\s+([0-9.+-]+)")
 TIME_FORMAT = "%y%m%d%H%M%S.%f"
@@ -97,13 +90,13 @@ class Cosmos:
         cmd_dX = f"{cmd} x {1e3 * dX}"
         LOGGER.debug(cmd_dX)
         self.sock.send((cmd_dX + "\n").encode())
-        resp_dX = self.sock.recv(64)
+        resp_dX = self.sock.recv(1024)
 
         # dZ after m to mm conversion will be sent
         cmd_dZ = f"{cmd} z {1e3 * dZ}"
         LOGGER.debug(cmd_dZ)
         self.sock.send((cmd_dZ + "\n").encode())
-        resp_dZ = self.sock.recv(64)
+        resp_dZ = self.sock.recv(1024)
 
         # dX and dZ after mm to m will be stored
         return Subref.from_cosmos(resp_dX, resp_dZ)
@@ -121,7 +114,7 @@ class Cosmos:
 
         LOGGER.debug(cmd)
         self.sock.send((cmd + "\n").encode())
-        resp = self.sock.recv(64)
+        resp = self.sock.recv(1024)
 
         return State.from_cosmos(resp)
 
@@ -154,15 +147,19 @@ class State:
     @classmethod
     def from_cosmos(cls, resp: bytes, /) -> Self:
         """Parse the current state from the COSMOS response."""
-        if (match := STATE_FORMAT.search(resp.decode())) is None:
-            raise ValueError("Could not parse the COSMOS response.")
+        fields = dict(FIELD_FORMAT.findall(resp.decode()))
 
-        return cls(
-            wind_speed=float(match[1]),
-            temperature=float(match[2]),
-            elevation=float(match[3]),
-            time=datetime.strptime(match[4], TIME_FORMAT).replace(tzinfo=TZ),
-        )
+        try:
+            return cls(
+                wind_speed=float(fields["wind"]),
+                temperature=float(fields["tmp"]),
+                elevation=float(fields["el"]),
+                time=datetime.strptime(fields["time"], TIME_FORMAT).replace(tzinfo=TZ),
+            )
+        except KeyError as error:
+            raise ValueError(
+                f"Could not parse the COSMOS response: {resp!r}"
+            ) from error
 
 
 @dataclass(frozen=True)
