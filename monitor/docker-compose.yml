@@ -12,7 +12,7 @@ services:
       # named volume: survives `docker compose down`
       - db-data:/var/lib/postgresql/data
       # runs only on first initialisation of the volume
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro,Z
     ports:
       # only for psql from the same machine; remove to close it off
       - "127.0.0.1:5432:5432"
