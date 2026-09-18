@@ -14,6 +14,7 @@ CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE TABLE IF NOT EXISTS weather (
     time        TIMESTAMPTZ NOT NULL,
     wind_speed  REAL,
+    wind_direction REAL,
     temperature REAL,
     PRIMARY KEY (time)
 );
@@ -33,6 +34,7 @@ COMMENT ON COLUMN weather.temperature IS 'degree Celsius';
 CREATE TABLE IF NOT EXISTS pointing (
     time      TIMESTAMPTZ NOT NULL,
     elevation REAL,
+    azimuth   REAL,
     PRIMARY KEY (time)
 );
 

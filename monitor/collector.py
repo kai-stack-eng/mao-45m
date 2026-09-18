@@ -70,8 +70,8 @@ State = cosmos_module.State
 #   2. add "wind_direction" to the "weather" tuple below
 #   3. add the field to State in mao_45m/cosmos.py
 TABLES: dict[str, tuple[str, ...]] = {
-    "weather": ("wind_speed", "temperature"),
-    "pointing": ("elevation",),
+    "weather": ("wind_speed", "wind_direction", "temperature"),
+    "pointing": ("elevation", "azimuth"),
 }
 
 

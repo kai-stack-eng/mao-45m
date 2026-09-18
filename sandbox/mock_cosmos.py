@@ -49,6 +49,7 @@ TELESCOPE = Telescope()
 def build_response(scenario: str) -> str:
     wind, direction, temp, stamp = TELESCOPE.weather()
     el = TELESCOPE.elevation()
+    az = (TELESCOPE.elevation() * 4) % 360
     ts = stamp.strftime(TIME_FORMAT)[:-4]
 
     if scenario == "extra":
@@ -66,7 +67,11 @@ def build_response(scenario: str) -> str:
     if scenario == "garbage":
         return "error: unknown command\n"
 
-    return f"wind: {wind:.2f}  tmp: {temp:.2f}  el: {el:.2f}  time: {ts}\n"
+    return (
+        f"wind: {wind:.2f} dir: {direction:.2f} tmp: {temp:.2f} "
+        f"el: {el:.2f}  az: {az:.2f}  time: {ts}\n"
+    )
+    
 
 
 class Handler(socketserver.StreamRequestHandler):

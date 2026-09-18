@@ -140,8 +140,10 @@ class State:
     """
 
     wind_speed: float
+    wind_direction: float
     temperature: float
     elevation: float
+    azimuth: float
     time: datetime
 
     @classmethod
@@ -152,8 +154,10 @@ class State:
         try:
             return cls(
                 wind_speed=float(fields["wind"]),
+                wind_direction=float(fields["dir"]),
                 temperature=float(fields["tmp"]),
                 elevation=float(fields["el"]),
+                azimuth=float(fields["az"]),
                 time=datetime.strptime(fields["time"], TIME_FORMAT).replace(tzinfo=TZ),
             )
         except KeyError as error:
