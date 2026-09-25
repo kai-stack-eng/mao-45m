@@ -65,9 +65,10 @@ Cosmos = cosmos_module.Cosmos
 State = cosmos_module.State
 
 # Which State field goes into which table. The names must match both the
-# State attributes and the database columns. To add wind direction:
-#   1. ALTER TABLE weather ADD COLUMN wind_direction REAL;
-#   2. add "wind_direction" to the "weather" tuple below
+# State attributes and the database columns. To add a field, e.g.
+# humidity (see "Adding a field" in monitor/README.md):
+#   1. ALTER TABLE weather ADD COLUMN humidity REAL;
+#   2. add "humidity" to the "weather" tuple below
 #   3. add the field to State in mao_45m/cosmos.py
 TABLES: dict[str, tuple[str, ...]] = {
     "weather": ("wind_speed", "wind_direction", "temperature"),
@@ -199,9 +200,12 @@ class Collector:
                 continue
 
             except ValueError as error:
-                # unparseable response: log and carry on, the next
-                # response is usually fine
-                LOGGER.warning(f"{error}")
+                # Unparseable response. If it was cut short, the rest
+                # is still in the socket buffer and would be read as
+                # the answer to the next request, shifting every
+                # reading by one. Reconnect to discard it.
+                LOGGER.warning(f"{error}; reconnecting")
+                self.drop_cosmos()
 
             next_poll += interval
             time.sleep(max(0.0, next_poll - time.monotonic()))
