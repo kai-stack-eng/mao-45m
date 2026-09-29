@@ -44,6 +44,41 @@ COMMENT ON TABLE  pointing           IS 'Antenna pointing state';
 COMMENT ON COLUMN pointing.time      IS 'Observation time reported by COSMOS';
 COMMENT ON COLUMN pointing.elevation IS 'degree';
 
+-- ---------------------------------------------------------------------
+-- control: one row per subreflector control period (0.5 s), written by
+-- `mao-45m subref control --database`.
+-- time is the last VDIF sample of the EPL integration (UTC), not the
+-- COSMOS time; that is kept in cosmos_time for comparison.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS control (
+    time        TIMESTAMPTZ NOT NULL,
+    cosmos_time TIMESTAMPTZ,
+    cal_time    TIMESTAMPTZ,
+    epl_c       REAL,
+    epl_t       REAL,
+    epl_r       REAL,
+    epl_b       REAL,
+    epl_l       REAL,
+    dx          REAL,
+    dz          REAL,
+    sent        BOOLEAN,
+    PRIMARY KEY (time)
+);
+
+SELECT create_hypertable('control', 'time', if_not_exists => TRUE);
+
+COMMENT ON TABLE  control             IS 'Subreflector control, one row per control period';
+COMMENT ON COLUMN control.time        IS 'Last VDIF sample of the EPL integration (UTC)';
+COMMENT ON COLUMN control.cosmos_time IS 'State time from COSMOS in the same period';
+COMMENT ON COLUMN control.cal_time    IS 'Time of the reference spectrum the EPL is relative to';
+COMMENT ON COLUMN control.epl_c       IS 'm';
+COMMENT ON COLUMN control.epl_t       IS 'm';
+COMMENT ON COLUMN control.epl_r       IS 'm';
+COMMENT ON COLUMN control.epl_b       IS 'm';
+COMMENT ON COLUMN control.epl_l       IS 'm';
+COMMENT ON COLUMN control.dx          IS 'm; subreflector X offset computed in this period';
+COMMENT ON COLUMN control.dz          IS 'm; subreflector Z offset computed in this period';
+COMMENT ON COLUMN control.sent        IS 'false in a dry run: dx, dz were computed but not sent';
 
 -- ---------------------------------------------------------------------
 -- Adding a field later (e.g. wind direction, azimuth) is a one-liner and
@@ -63,6 +98,8 @@ COMMENT ON COLUMN pointing.elevation IS 'degree';
 -- ---------------------------------------------------------------------
 ALTER TABLE weather  SET (timescaledb.compress);
 ALTER TABLE pointing SET (timescaledb.compress);
+ALTER TABLE control SET (timescaledb.compress);
 
 SELECT add_compression_policy('weather',  INTERVAL '30 days', if_not_exists => TRUE);
 SELECT add_compression_policy('pointing', INTERVAL '30 days', if_not_exists => TRUE);
+SELECT add_compression_policy('control', INTERVAL '30 days', if_not_exists => TRUE);
