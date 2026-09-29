@@ -1,0 +1,290 @@
+"""Write the telescope state and the subreflector control to PostgreSQL.
+
+Used by subref.control when it is run with ``--database``. The
+connection string is read from the environment variable
+MAO_DATABASE_URL rather than taken as an argument, because control()
+logs all of its arguments and the string contains the password.
+
+Writing must never hold up or stop the control loop, so:
+
+* every statement has a short timeout (STATEMENT_TIMEOUT),
+* errors are logged, never raised,
+* after the connection is lost, reconnection is attempted only every
+  RETRY_WAIT seconds, so a missing database costs one connection
+  attempt per RETRY_WAIT rather than one per control period.
+
+psycopg is imported only when a Database is created, so the control
+side does not need it unless --database is given.
+
+"""
+
+__all__ = ["Database", "get_database"]
+
+
+# standard library
+import math
+import os
+from dataclasses import asdict, fields
+from datetime import datetime, timezone
+from logging import getLogger
+from time import monotonic
+from typing import TYPE_CHECKING, Any
+
+
+# dependencies
+from .cosmos import State
+
+if TYPE_CHECKING:
+    import xarray as xr
+
+
+# constants
+ENV_DSN = "MAO_DATABASE_URL"
+LOGGER = getLogger(__name__)
+CONNECT_TIMEOUT = 2  # s; libpq does not accept less
+STATEMENT_TIMEOUT = 200  # ms; per statement, well inside one control period
+RETRY_WAIT = 10.0  # s; wait after losing the connection before reconnecting
+
+# Which State field goes into which table. The names must match both the
+# State attributes and the database columns (see monitor/init.sql).
+STATE_TABLES: dict[str, tuple[str, ...]] = {
+    "weather": ("wind_speed", "wind_direction", "temperature"),
+    "pointing": ("elevation", "azimuth"),
+}
+
+# Feeds stored in the control table as epl_<feed>. Other names in the
+# feed pattern (e.g. "x" for the gaps between feeds) are not stored.
+FEEDS = ("c", "t", "r", "b", "l")
+
+
+class Database:
+    """Database writer for the subreflector control loop.
+
+    Args:
+        dsn: PostgreSQL connection string.
+
+    """
+
+    def __init__(self, dsn: str, /) -> None:
+        try:
+            import psycopg
+        except ImportError as error:
+            raise ImportError(
+                "psycopg is needed to write to the database. "
+                "Install it with: uv sync --extra monitor"
+            ) from error
+
+        self.psycopg = psycopg
+        self.dsn = dsn
+        self.conn: Any = None
+        self.retry_at = 0.0
+        self.last_error: str | None = None
+        self.failures = 0
+
+        check_state_tables()
+        self.connect()
+
+    def write(
+        self,
+        *,
+        state: State,
+        epl: "xr.DataArray",
+        epl_cal: "xr.DataArray",
+        subref: "xr.DataArray",
+        sent: bool,
+    ) -> bool:
+        """Write one control cycle. Never raises; False if nothing was written.
+
+        Args:
+            state: Telescope state received in this cycle.
+            epl: Estimated EPL (in m; feed).
+            epl_cal: Estimated EPL at calibration (in m; feed).
+                Only its time is stored.
+            subref: Subreflector parameters (in m; drive).
+            sent: Whether the parameters were sent to COSMOS
+                (False in a dry run).
+
+        Returns:
+            True if the rows were written (or were duplicates).
+
+        """
+        try:
+            rows = get_state_rows(state)
+            rows["control"] = get_control_row(
+                state=state,
+                epl=epl,
+                epl_cal=epl_cal,
+                subref=subref,
+                sent=sent,
+            )
+        except Exception as error:
+            self.report(f"could not prepare rows: {error!r}")
+            return False
+
+        if (conn := self.connect()) is None:
+            return False
+
+        try:
+            with conn.transaction():
+                for table, row in rows.items():
+                    insert(conn, table, row)
+        except self.psycopg.Error as error:
+            if conn.broken or conn.closed:
+                self.drop(f"lost the database connection: {error!r}")
+            else:
+                self.report(f"write skipped: {error!r}")
+
+            return False
+
+        self.recovered()
+        return True
+
+    def connect(self) -> Any:
+        """Return a live connection, or None if not available now."""
+        if self.conn is not None and not self.conn.closed:
+            return self.conn
+
+        if monotonic() < self.retry_at:
+            return None
+
+        try:
+            self.conn = self.psycopg.connect(
+                self.dsn,
+                autocommit=True,
+                connect_timeout=CONNECT_TIMEOUT,
+                options=f"-c statement_timeout={STATEMENT_TIMEOUT}",
+            )
+        except self.psycopg.Error as error:
+            self.drop(f"could not connect to the database: {error!r}")
+            return None
+
+        LOGGER.info("Connected to the database.")
+        return self.conn
+
+    def drop(self, message: str, /) -> None:
+        """Close the connection and wait RETRY_WAIT before reconnecting."""
+        self.close()
+        self.retry_at = monotonic() + RETRY_WAIT
+        self.report(f"{message}; retrying every {RETRY_WAIT:g} s")
+
+    def report(self, message: str, /) -> None:
+        """Log a failure: WARNING the first time, DEBUG while it repeats."""
+        self.failures += 1
+
+        if message != self.last_error:
+            LOGGER.warning(message)
+            self.last_error = message
+        else:
+            LOGGER.debug(message)
+
+    def recovered(self) -> None:
+        """Log once that writing works again after failures."""
+        if self.failures:
+            LOGGER.info(f"Database writes resumed after {self.failures} failures.")
+
+        self.failures = 0
+        self.last_error = None
+
+    def close(self) -> None:
+        """Close the connection (safe to call more than once)."""
+        if self.conn is not None:
+            try:
+                self.conn.close()
+            except Exception:
+                pass
+
+            self.conn = None
+
+
+def get_database() -> Database:
+    """Create a Database from the environment variable MAO_DATABASE_URL."""
+    if not (dsn := os.environ.get(ENV_DSN)):
+        raise ValueError(
+            f"Set {ENV_DSN} to write to the database, e.g. "
+            f"postgresql://nobeyama:<password>@127.0.0.1:5432/nobeyama"
+        )
+
+    return Database(dsn)
+
+
+def get_control_row(
+    *,
+    state: State,
+    epl: "xr.DataArray",
+    epl_cal: "xr.DataArray",
+    subref: "xr.DataArray",
+    sent: bool,
+) -> dict[str, Any]:
+    """Build the row for the control table."""
+    if (time := get_time(epl)) is None:
+        raise ValueError("the EPL has no time coordinate")
+
+    feeds = set(epl.feed.values.tolist())
+    row: dict[str, Any] = {
+        "time": time,
+        "cosmos_time": state.time,
+        "cal_time": get_time(epl_cal),
+    }
+
+    for feed in FEEDS:
+        row[f"epl_{feed}"] = to_real(epl.sel(feed=feed)) if feed in feeds else None
+
+    row["dx"] = to_real(subref.sel(drive="X"))
+    row["dz"] = to_real(subref.sel(drive="Z"))
+    row["sent"] = sent
+    return row
+
+
+def get_state_rows(state: State, /) -> dict[str, dict[str, Any]]:
+    """Build one row per table in STATE_TABLES."""
+    values = asdict(state)
+    rows: dict[str, dict[str, Any]] = {}
+
+    for table, columns in STATE_TABLES.items():
+        rows[table] = {"time": values["time"]}
+
+        for column in columns:
+            rows[table][column] = to_real(values[column])
+
+    return rows
+
+
+def get_time(da: "xr.DataArray", /) -> datetime | None:
+    """Return the time coordinate (naive UTC) as an aware datetime."""
+    if "time" not in da.coords:
+        return None
+
+    # datetime64[ns].item() gives an int, so go through [us] first
+    value = da.coords["time"].values.astype("datetime64[us]").item()
+    return None if value is None else value.replace(tzinfo=timezone.utc)
+
+
+def insert(conn: Any, table: str, row: dict[str, Any], /) -> None:
+    """Insert one row, ignoring one whose time is already there."""
+    columns = ", ".join(row)
+    holders = ", ".join(["%s"] * len(row))
+    sql = (
+        f"INSERT INTO {table} ({columns}) VALUES ({holders}) "
+        f"ON CONFLICT (time) DO NOTHING"
+    )
+
+    with conn.cursor() as cursor:
+        cursor.execute(sql, list(row.values()))
+
+
+def to_real(value: Any, /) -> float | None:
+    """Convert to float, turning NaN into None (NULL in the database)."""
+    value = float(value)
+    return None if math.isnan(value) else value
+
+
+def check_state_tables() -> None:
+    """Warn about mismatches between State and STATE_TABLES."""
+    stored = {"time"}.union(*STATE_TABLES.values())
+    names = {field.name for field in fields(State)}
+
+    if missing := stored - names:
+        LOGGER.warning(f"STATE_TABLES names that are not State fields: {sorted(missing)}")
+
+    if extra := names - stored:
+        LOGGER.warning(f"State fields that are not stored: {sorted(extra)}")

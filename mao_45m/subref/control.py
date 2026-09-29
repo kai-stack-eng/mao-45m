@@ -18,6 +18,7 @@ from ndtools import Range
 from tqdm import tqdm
 from .convert import get_converter as get_subref_converter, get_epl_offsets
 from ..cosmos import get_cosmos
+from ..database import get_database
 from ..epl.convert import get_aggregated, get_converter as get_epl_converter
 from ..vdif import FRAMES_PER_SAMPLE
 from ..vdif.convert import get_samples_faster as get_samples
@@ -75,6 +76,7 @@ def control(
     epl_data_max: int | None = None,
     subref_data: PathLike[str] | str | None = None,
     subref_data_max: int | None = None,
+    database: bool = False,
     # options for logging
     log_file: PathLike[str] | str | None = None,
     log_file_level: int | str = "INFO",
@@ -121,6 +123,8 @@ def control(
             epl_offsets = get_epl_offsets(epl_offset_schedule)
         else:
             epl_offsets = None
+            # connect to the database (optional)
+            db = get_database() if database else None
 
         with (
             tqdm(disable=not status, unit="EPL") as bar,
@@ -174,13 +178,22 @@ def control(
                         # estimate the current subref parameters
                         subref = get_subref(epl, epl_cal, epl_offset=epl_offset)
 
-                        # send the subref control to COSMOS
+                                               # send the subref control to COSMOS
                         if not dry_run:
                             cosmos.send_subref(
                                 dX=float(subref.sel(drive="X")),
                                 dZ=float(subref.sel(drive="Z")),
                             )
 
+                        # write the state, EPL and subref to the database (optional)
+                        if db is not None:
+                            db.write(
+                                state=state,
+                                epl=epl,
+                                epl_cal=epl_cal,
+                                subref=subref,
+                                sent=not dry_run,
+                            )
                         # append aggregated, EPL, subref data (optional)
                         if aggregated_data is not None:
                             aggs.append(aggregated)
@@ -196,6 +209,9 @@ def control(
             except KeyboardInterrupt:
                 LOGGER.warning("Control interrupted by user.")
             finally:
+                # close the database connection (optional)
+                if db is not None:
+                    db.close()
                 # save aggregated data (optional)
                 if aggregated_data is not None:
                     save_dataarray(xr.concat(aggs, dim="time"), aggregated_data)
