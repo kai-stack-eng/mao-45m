@@ -43,23 +43,6 @@ services:
       db:
         condition: service_healthy
 
-  collector:
-    build:
-      context: ..
-      dockerfile: monitor/Dockerfile
-    restart: unless-stopped
-    environment:
-      COSMOS_HOST: ${COSMOS_HOST:-host.docker.internal}
-      COSMOS_PORT: ${COSMOS_PORT:-11111}
-      POLL_INTERVAL: ${POLL_INTERVAL:-1.0}
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      DATABASE_URL: "postgresql://${POSTGRES_USER:-nobeyama}:${POSTGRES_PASSWORD:-nobeyama}@db:5432/${POSTGRES_DB:-nobeyama}"
-    extra_hosts:
-      # lets the container reach a mock server running on the host
-      - "host.docker.internal:host-gateway"
-    depends_on:
-      db:
-        condition: service_healthy
 
 volumes:
   db-data:
