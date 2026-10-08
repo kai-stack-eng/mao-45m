@@ -123,8 +123,9 @@ def control(
             epl_offsets = get_epl_offsets(epl_offset_schedule)
         else:
             epl_offsets = None
-            # connect to the database (optional)
-            db = get_database() if database else None
+
+        # connect to the database (optional)
+        db = get_database() if database else None
 
         with (
             tqdm(disable=not status, unit="EPL") as bar,
