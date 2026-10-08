@@ -68,6 +68,53 @@ COMMENT ON COLUMN control.dz          IS 'm; subreflector Z offset computed in t
 COMMENT ON COLUMN control.sent        IS 'false in a dry run: dx, dz were computed but not sent';
 
 -- ---------------------------------------------------------------------
+-- run: one row per run of `mao-45m subref control --database`, holding
+-- the settings given at the start. Times are in s, lengths in m and
+-- frequencies in Hz; each (min, max) argument is split into two columns.
+-- started_at / finished_at are the clock of the observation PC (UTC).
+-- finished_at stays NULL while the run is going on, or if the process
+-- was killed (kill, power loss) before it could write it.
+-- error holds the exception that ended the run; NULL means a normal
+-- end or Ctrl+C.
+-- A few rows per day, so an ordinary table (not a hypertable).
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS run (
+    started_at             TIMESTAMPTZ NOT NULL,
+    finished_at            TIMESTAMPTZ,
+    error                  TEXT,
+    -- EPL estimates
+    cal_interval           DOUBLE PRECISION,
+    freq_binning           INTEGER,
+    freq_range_min         DOUBLE PRECISION,
+    freq_range_max         DOUBLE PRECISION,
+    integ_per_sample       DOUBLE PRECISION,
+    integ_per_epl          DOUBLE PRECISION,
+    -- subreflector control
+    dry_run                BOOLEAN,
+    control_duration       DOUBLE PRECISION,
+    control_origin         TIMESTAMPTZ,
+    control_period         DOUBLE PRECISION,
+    epl_interval_tolerance DOUBLE PRECISION,
+    epl_offset_schedule    TEXT,
+    integral_gain_dx       DOUBLE PRECISION,
+    integral_gain_dz       DOUBLE PRECISION,
+    proportional_gain_dx   DOUBLE PRECISION,
+    proportional_gain_dz   DOUBLE PRECISION,
+    anti_windup_gain_dx    DOUBLE PRECISION,
+    anti_windup_gain_dz    DOUBLE PRECISION,
+    range_dx_min           DOUBLE PRECISION,
+    range_dx_max           DOUBLE PRECISION,
+    range_dz_min           DOUBLE PRECISION,
+    range_dz_max           DOUBLE PRECISION,
+    range_ddx_min          DOUBLE PRECISION,
+    range_ddx_max          DOUBLE PRECISION,
+    range_ddz_min          DOUBLE PRECISION,
+    range_ddz_max          DOUBLE PRECISION,
+    PRIMARY KEY (started_at)
+);
+
+COMMENT ON TABLE run IS 'Settings of each control run (times in s, lengths in m, frequencies in Hz)';
+-- ---------------------------------------------------------------------
 -- Adding a field later (e.g. pressure) is a one-liner and completes
 -- instantly even on a large table:
 --

@@ -4,6 +4,7 @@ __all__ = ["control"]
 # standard library
 from collections import deque
 from collections.abc import Sequence
+from contextlib import nullcontext
 from logging import getLogger
 from os import PathLike
 from pathlib import Path
@@ -84,13 +85,15 @@ def control(
     log_stderr_level: int | str = "WARNING",
 ) -> None:
     """Control the subreflector of the Nobeyama 45m telescope by MAO."""
+    params = dict(locals())
+
     with log(
         file=log_file,
         file_level=log_file_level,
         stderr=log_stderr,
         stderr_level=log_stderr_level,
     ):
-        for key, val in locals().items():
+        for key, val in params.items():
             LOGGER.debug(f"{key}: {val!r}")
 
         # define the frame size for each EPL estimate
@@ -124,13 +127,12 @@ def control(
         else:
             epl_offsets = None
 
-        # connect to the database (optional)
-        db = get_database() if database else None
 
         with (
             tqdm(disable=not status, unit="EPL") as bar,
             get_cosmos(host=cosmos_host, port=cosmos_port, safe=cosmos_safe) as cosmos,
             get_frames(frame_size * 2, group=vdif_group, port=vdif_port) as frames,
+            get_database() if database else nullcontext() as db,
         ):
             # wait until enough frames are buffered
             while len(frames.get(frame_size)) != frame_size:
@@ -143,6 +145,9 @@ def control(
             # start the subref control
             LOGGER.info("Subreflector control started.")
             control_origin = to_datetime(control_origin)
+            # record the start of this run (optional)
+            if db is not None:
+                db.start_run(params | {"control_origin": control_origin})
 
             try:
                 for _ in range(epl_size):
@@ -210,9 +215,6 @@ def control(
             except KeyboardInterrupt:
                 LOGGER.warning("Control interrupted by user.")
             finally:
-                # close the database connection (optional)
-                if db is not None:
-                    db.close()
                 # save aggregated data (optional)
                 if aggregated_data is not None:
                     save_dataarray(xr.concat(aggs, dim="time"), aggregated_data)
