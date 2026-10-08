@@ -11,38 +11,25 @@ CREATE EXTENSION IF NOT EXISTS timescaledb;
 -- The station is believed to update once a minute, so a fast poll loop
 -- will see the same row repeatedly; the primary key drops those.
 -- ---------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS weather (
+CREATE TABLE IF NOT EXISTS cosmos (
     time        TIMESTAMPTZ NOT NULL,
     wind_speed  REAL,
     wind_direction REAL,
     temperature REAL,
+    elevation      REAL,
+    azimuth        REAL,
     PRIMARY KEY (time)
 );
 
-SELECT create_hypertable('weather', 'time', if_not_exists => TRUE);
+SELECT create_hypertable('cosmos', 'time', if_not_exists => TRUE);
 
-COMMENT ON TABLE  weather             IS 'Meteorological station readings';
-COMMENT ON COLUMN weather.time        IS 'Observation time reported by COSMOS';
-COMMENT ON COLUMN weather.wind_speed  IS 'm/s';
-COMMENT ON COLUMN weather.temperature IS 'degree Celsius';
-
-
--- ---------------------------------------------------------------------
--- pointing: where the antenna is looking.
--- Kept separate from weather because it may update far more often.
--- ---------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS pointing (
-    time      TIMESTAMPTZ NOT NULL,
-    elevation REAL,
-    azimuth   REAL,
-    PRIMARY KEY (time)
-);
-
-SELECT create_hypertable('pointing', 'time', if_not_exists => TRUE);
-
-COMMENT ON TABLE  pointing           IS 'Antenna pointing state';
-COMMENT ON COLUMN pointing.time      IS 'Observation time reported by COSMOS';
-COMMENT ON COLUMN pointing.elevation IS 'degree';
+COMMENT ON TABLE  cosmos             IS 'COSMOS state readings';
+COMMENT ON COLUMN cosmos.time        IS 'Observation time reported by COSMOS';
+COMMENT ON COLUMN cosmos.wind_speed  IS 'm/s';
+COMMENT ON COLUMN cosmos.wind_direction IS 'degree; NULL if COSMOS does not report it';
+COMMENT ON COLUMN cosmos.temperature IS 'degree Celsius';
+COMMENT ON COLUMN cosmos.elevation      IS 'degree';
+COMMENT ON COLUMN cosmos.azimuth        IS 'degree; NULL if COSMOS does not report it';
 
 -- ---------------------------------------------------------------------
 -- control: one row per subreflector control period (0.5 s), written by
@@ -81,25 +68,23 @@ COMMENT ON COLUMN control.dz          IS 'm; subreflector Z offset computed in t
 COMMENT ON COLUMN control.sent        IS 'false in a dry run: dx, dz were computed but not sent';
 
 -- ---------------------------------------------------------------------
--- Adding a field later (e.g. wind direction, azimuth) is a one-liner and
--- completes instantly even on a large table:
+-- Adding a field later (e.g. pressure) is a one-liner and completes
+-- instantly even on a large table:
 --
---   ALTER TABLE weather  ADD COLUMN wind_direction REAL;
---   ALTER TABLE pointing ADD COLUMN azimuth        REAL;
+--   ALTER TABLE cosmos ADD COLUMN pressure REAL;
 --
--- Then add the same name to TABLES in collector.py and to State in
--- mao_45m/cosmos.py. Existing rows keep NULL for the new column.
+-- Then add the same name to STATE_TABLES in mao_45m/database.py and to
+-- State in mao_45m/cosmos.py. Existing rows keep NULL for the new column.
 -- ---------------------------------------------------------------------
-
 
 -- ---------------------------------------------------------------------
 -- Compression. Harmless at this data rate, and it keeps things tidy if
 -- the collector is ever left running for months.
 -- ---------------------------------------------------------------------
-ALTER TABLE weather  SET (timescaledb.compress);
-ALTER TABLE pointing SET (timescaledb.compress);
+ALTER TABLE cosmos  SET (timescaledb.compress);
+
 ALTER TABLE control SET (timescaledb.compress);
 
-SELECT add_compression_policy('weather',  INTERVAL '30 days', if_not_exists => TRUE);
-SELECT add_compression_policy('pointing', INTERVAL '30 days', if_not_exists => TRUE);
+SELECT add_compression_policy('cosmos',  INTERVAL '30 days', if_not_exists => TRUE);
+
 SELECT add_compression_policy('control', INTERVAL '30 days', if_not_exists => TRUE);

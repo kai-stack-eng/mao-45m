@@ -48,10 +48,14 @@ RETRY_WAIT = 10.0  # s; wait after losing the connection before reconnecting
 # Which State field goes into which table. The names must match both the
 # State attributes and the database columns (see monitor/init.sql).
 STATE_TABLES: dict[str, tuple[str, ...]] = {
-    "weather": ("wind_speed", "wind_direction", "temperature"),
-    "pointing": ("elevation", "azimuth"),
+    "cosmos": (
+        "wind_speed",
+        "wind_direction",
+        "temperature",
+        "elevation",
+        "azimuth",
+    ),
 }
-
 # Feeds stored in the control table as epl_<feed>. Other names in the
 # feed pattern (e.g. "x" for the gaps between feeds) are not stored.
 FEEDS = ("c", "t", "r", "b", "l")
