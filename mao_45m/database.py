@@ -24,7 +24,7 @@ __all__ = ["Database", "get_database"]
 # standard library
 import math
 import os    
-from dataclasses import asdict, fields
+from dataclasses import asdict, fields, replace
 from datetime import datetime, timezone
 from logging import getLogger
 from time import monotonic
@@ -32,12 +32,11 @@ from typing import TYPE_CHECKING, Any
 
 
 # dependencies
-import numpy as np    
 from .cosmos import State
-from .utils import to_timedelta 
 
 if TYPE_CHECKING:
     import xarray as xr
+    from .subref.records import Run
 
 
 # constants
@@ -46,7 +45,7 @@ LOGGER = getLogger(__name__)
 CONNECT_TIMEOUT = 2  # s; libpq does not accept less
 STATEMENT_TIMEOUT = 200  # ms; per statement, well inside one control period
 RETRY_WAIT = 10.0  # s; wait after losing the connection before reconnecting
-SECOND = np.timedelta64(1, "s")
+
 # Which State field goes into which table. The names must match both the
 # State attributes and the database columns (see monitor/init.sql).
 STATE_TABLES: dict[str, tuple[str, ...]] = {
@@ -62,32 +61,7 @@ STATE_TABLES: dict[str, tuple[str, ...]] = {
 # feed pattern (e.g. "x" for the gaps between feeds) are not stored.
 FEEDS = ("c", "t", "r", "b", "l")
 
-# Arguments of control() stored in the run table. Column names are the
-# argument names in lower case; times are stored in s, lengths in m and
-# frequencies in Hz. Each (min, max) pair becomes <name>_min, <name>_max.
-RUN_SECONDS = (
-    "cal_interval",
-    "integ_per_sample",
-    "integ_per_epl",
-    "control_duration",
-    "control_period",
-)
-RUN_NUMBERS = (
-    "epl_interval_tolerance",
-    "integral_gain_dX",
-    "integral_gain_dZ",
-    "proportional_gain_dX",
-    "proportional_gain_dZ",
-    "anti_windup_gain_dX",
-    "anti_windup_gain_dZ",
-)
-RUN_RANGES = (
-    "freq_range",
-    "range_dX",
-    "range_dZ",
-    "range_ddX",
-    "range_ddZ",
-)
+
 
 class Database:
     """Database writer for the subreflector control loop.
@@ -112,7 +86,7 @@ class Database:
         self.retry_at = 0.0
         self.last_error: str | None = None
         self.failures = 0
-        self.run: dict[str, Any] | None = None
+        self.run: "Run | None" = None
 
         check_state_tables()
         self.connect()
@@ -172,20 +146,14 @@ class Database:
         self.recovered()
         return True
     
-    def start_run(self, params: dict[str, Any], /) -> None:
+    def start_run(self, run: "Run", /) -> None:
         """Record the start of a control run in the run table. Never raises.
 
         Args:
-            params: Arguments of control(), with control_origin
-                already converted to a datetime64.
+            run: Settings of the run (see mao_45m.subref.records).
 
         """
-        try:
-            self.run = get_run_row(params)
-        except Exception as error:
-            self.report(f"could not prepare the run record: {error!r}")
-            return
-
+        self.run = run
         self.write_run()
 
     def finish_run(self, error: BaseException | None = None, /) -> None:
@@ -198,8 +166,11 @@ class Database:
         if self.run is None:
             return
 
-        self.run["finished_at"] = datetime.now(timezone.utc)
-        self.run["error"] = None if error is None else repr(error)
+        self.run = replace(
+            self.run,
+            finished_at=datetime.now(timezone.utc),
+            error=None if error is None else repr(error),
+        )
         self.write_run()
 
     def write_run(self) -> None:
@@ -319,27 +290,7 @@ def get_control_row(
     row["sent"] = sent
     return row
 
-def get_run_row(params: dict[str, Any], /) -> dict[str, Any]:
-    """Build the row for the run table (finished_at is added at the end)."""
-    row: dict[str, Any] = {"started_at": datetime.now(timezone.utc)}
 
-    for name in RUN_SECONDS:
-        row[name.lower()] = float(to_timedelta(params[name]) / SECOND)
-
-    for name in RUN_NUMBERS:
-        row[name.lower()] = float(params[name])
-
-    for name in RUN_RANGES:
-        low, high = params[name]
-        row[f"{name.lower()}_min"] = float(low)
-        row[f"{name.lower()}_max"] = float(high)
-
-    schedule = params["epl_offset_schedule"]
-    row["freq_binning"] = int(params["freq_binning"])
-    row["dry_run"] = bool(params["dry_run"])
-    row["control_origin"] = to_utc(params["control_origin"])
-    row["epl_offset_schedule"] = None if schedule is None else str(schedule)
-    return row
 
 def get_state_rows(state: State, /) -> dict[str, dict[str, Any]]:
     """Build one row per table in STATE_TABLES."""
@@ -377,8 +328,9 @@ def insert(conn: Any, table: str, row: dict[str, Any], /) -> None:
     with conn.cursor() as cursor:
         cursor.execute(sql, list(row.values()))
 
-def upsert_run(conn: Any, row: dict[str, Any], /) -> None:
+def upsert_run(conn: Any, run: "Run", /) -> None:
     """Insert the run row, or update it if it was already inserted."""
+    row = asdict(run)
     columns = ", ".join(row)
     holders = ", ".join(["%s"] * len(row))
     updates = ", ".join(f"{key} = EXCLUDED.{key}" for key in row if key != "started_at")
@@ -391,9 +343,7 @@ def upsert_run(conn: Any, row: dict[str, Any], /) -> None:
         cursor.execute(sql, list(row.values()))
 
 
-def to_utc(value: Any, /) -> datetime:
-    """Convert a naive UTC datetime64 to an aware datetime."""
-    return np.datetime64(value, "us").item().replace(tzinfo=timezone.utc)
+
 
 def to_real(value: Any, /) -> float | None:
     """Convert to float, turning NaN into None (NULL in the database)."""

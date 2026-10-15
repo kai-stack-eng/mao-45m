@@ -18,6 +18,7 @@ import xarray as xr
 from ndtools import Range
 from tqdm import tqdm
 from .convert import get_converter as get_subref_converter, get_epl_offsets
+from .records import Run
 from ..cosmos import get_cosmos
 from ..database import get_database
 from ..epl.convert import get_aggregated, get_converter as get_epl_converter
@@ -147,7 +148,7 @@ def control(
             control_origin = to_datetime(control_origin)
             # record the start of this run (optional)
             if db is not None:
-                db.start_run(params | {"control_origin": control_origin})
+                db.start_run(Run.from_args(params | {"control_origin": control_origin}))
 
             try:
                 for _ in range(epl_size):
