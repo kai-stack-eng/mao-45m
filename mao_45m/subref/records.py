@@ -8,25 +8,89 @@ control loop's own types happens here.
 
 """
 
-__all__ = ["Run"]
+__all__ = ["Control", "Run"]
 
 
 # standard library
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 
 # dependencies
 import numpy as np
 from typing_extensions import Self
 from ..utils import to_timedelta
+if TYPE_CHECKING:
+    import xarray as xr
+    from ..cosmos import State
 
 
 # constants
 SECOND = np.timedelta64(1, "s")
 
+@dataclass(frozen=True)
+class Control:
+    """One row of the control table: one control period.
 
+    EPLs and subreflector offsets are in m. A feed that is not in the
+    feed pattern is None, and an EPL that could not be estimated is NaN;
+    both are stored as NULL.
+
+    """
+
+    time: datetime | None  # last VDIF sample of the EPL integration (UTC)
+    cosmos_time: datetime
+    cal_time: datetime | None
+    epl_c: float | None  # m
+    epl_t: float | None  # m
+    epl_r: float | None  # m
+    epl_b: float | None  # m
+    epl_l: float | None  # m
+    dx: float  # m
+    dz: float  # m
+    sent: bool
+
+    @classmethod
+    def from_cycle(
+        cls,
+        *,
+        state: "State",
+        epl: "xr.DataArray",
+        epl_cal: "xr.DataArray",
+        subref: "xr.DataArray",
+        sent: bool,
+    ) -> Self:
+        """Create the record of one control period.
+
+        Args:
+            state: Telescope state received in this period.
+            epl: Estimated EPL (in m; feed).
+            epl_cal: Estimated EPL at calibration (in m; feed).
+                Only its time is stored.
+            subref: Subreflector parameters (in m; drive).
+            sent: Whether the parameters were sent to COSMOS
+                (False in a dry run).
+
+        """
+        feeds = set(epl.feed.values.tolist())
+
+        def get_epl(feed: str, /) -> float | None:
+            return float(epl.sel(feed=feed)) if feed in feeds else None
+
+        return cls(
+            time=get_time(epl),
+            cosmos_time=state.time,
+            cal_time=get_time(epl_cal),
+            epl_c=get_epl("c"),
+            epl_t=get_epl("t"),
+            epl_r=get_epl("r"),
+            epl_b=get_epl("b"),
+            epl_l=get_epl("l"),
+            dx=float(subref.sel(drive="X")),
+            dz=float(subref.sel(drive="Z")),
+            sent=sent,
+        )
 @dataclass(frozen=True)
 class Run:
     """One row of the run table: the settings of one control run.
@@ -111,6 +175,14 @@ class Run:
             range_ddz_max=float(args["range_ddZ"][1]),
         )
 
+def get_time(da: "xr.DataArray", /) -> datetime | None:
+    """Return the time coordinate (naive UTC) as an aware datetime."""
+    if "time" not in da.coords:
+        return None
+
+    # datetime64[ns].item() gives an int, so go through [us] first
+    value = da.coords["time"].values.astype("datetime64[us]").item()
+    return None if value is None else value.replace(tzinfo=timezone.utc)
 
 def to_seconds(value: Any, /) -> float:
     """Convert a time length (e.g. "10 s", "2 hr" or 0.5) to seconds."""

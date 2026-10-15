@@ -18,7 +18,7 @@ import xarray as xr
 from ndtools import Range
 from tqdm import tqdm
 from .convert import get_converter as get_subref_converter, get_epl_offsets
-from .records import Run
+from .records import Control, Run
 from ..cosmos import get_cosmos
 from ..database import get_database
 from ..epl.convert import get_aggregated, get_converter as get_epl_converter
@@ -196,10 +196,13 @@ def control(
                         if db is not None:
                             db.write(
                                 state=state,
-                                epl=epl,
-                                epl_cal=epl_cal,
-                                subref=subref,
-                                sent=not dry_run,
+                                control=Control.from_cycle(
+                                    state=state,
+                                    epl=epl,
+                                    epl_cal=epl_cal,
+                                    subref=subref,
+                                    sent=not dry_run,
+                                ),
                             )
                         # append aggregated, EPL, subref data (optional)
                         if aggregated_data is not None:

@@ -35,8 +35,7 @@ from typing import TYPE_CHECKING, Any
 from .cosmos import State
 
 if TYPE_CHECKING:
-    import xarray as xr
-    from .subref.records import Run
+    from .subref.records import Control, Run
 
 
 # constants
@@ -57,9 +56,7 @@ STATE_TABLES: dict[str, tuple[str, ...]] = {
         "azimuth",
     ),
 }
-# Feeds stored in the control table as epl_<feed>. Other names in the
-# feed pattern (e.g. "x" for the gaps between feeds) are not stored.
-FEEDS = ("c", "t", "r", "b", "l")
+
 
 
 
@@ -91,25 +88,13 @@ class Database:
         check_state_tables()
         self.connect()
 
-    def write(
-        self,
-        *,
-        state: State,
-        epl: "xr.DataArray",
-        epl_cal: "xr.DataArray",
-        subref: "xr.DataArray",
-        sent: bool,
-    ) -> bool:
+    def write(self, *, state: State, control: "Control") -> bool:
         """Write one control cycle. Never raises; False if nothing was written.
 
         Args:
             state: Telescope state received in this cycle.
-            epl: Estimated EPL (in m; feed).
-            epl_cal: Estimated EPL at calibration (in m; feed).
-                Only its time is stored.
-            subref: Subreflector parameters (in m; drive).
-            sent: Whether the parameters were sent to COSMOS
-                (False in a dry run).
+            control: Row of the control table for this cycle
+                (see mao_45m.subref.records).
 
         Returns:
             True if the rows were written (or were duplicates).
@@ -117,13 +102,7 @@ class Database:
         """
         try:
             rows = get_state_rows(state)
-            rows["control"] = get_control_row(
-                state=state,
-                epl=epl,
-                epl_cal=epl_cal,
-                subref=subref,
-                sent=sent,
-            )
+            rows["control"] = asdict(control)
         except Exception as error:
             self.report(f"could not prepare rows: {error!r}")
             return False
@@ -263,34 +242,6 @@ def get_database() -> Database:
     return Database(dsn)
 
 
-def get_control_row(
-    *,
-    state: State,
-    epl: "xr.DataArray",
-    epl_cal: "xr.DataArray",
-    subref: "xr.DataArray",
-    sent: bool,
-) -> dict[str, Any]:
-    """Build the row for the control table."""
-    if (time := get_time(epl)) is None:
-        raise ValueError("the EPL has no time coordinate")
-
-    feeds = set(epl.feed.values.tolist())
-    row: dict[str, Any] = {
-        "time": time,
-        "cosmos_time": state.time,
-        "cal_time": get_time(epl_cal),
-    }
-
-    for feed in FEEDS:
-        row[f"epl_{feed}"] = to_real(epl.sel(feed=feed)) if feed in feeds else None
-
-    row["dx"] = to_real(subref.sel(drive="X"))
-    row["dz"] = to_real(subref.sel(drive="Z"))
-    row["sent"] = sent
-    return row
-
-
 
 def get_state_rows(state: State, /) -> dict[str, dict[str, Any]]:
     """Build one row per table in STATE_TABLES."""
@@ -306,15 +257,6 @@ def get_state_rows(state: State, /) -> dict[str, dict[str, Any]]:
     return rows
 
 
-def get_time(da: "xr.DataArray", /) -> datetime | None:
-    """Return the time coordinate (naive UTC) as an aware datetime."""
-    if "time" not in da.coords:
-        return None
-
-    # datetime64[ns].item() gives an int, so go through [us] first
-    value = da.coords["time"].values.astype("datetime64[us]").item()
-    return None if value is None else value.replace(tzinfo=timezone.utc)
-
 
 def insert(conn: Any, table: str, row: dict[str, Any], /) -> None:
     """Insert one row, ignoring one whose time is already there."""
@@ -326,7 +268,7 @@ def insert(conn: Any, table: str, row: dict[str, Any], /) -> None:
     )
 
     with conn.cursor() as cursor:
-        cursor.execute(sql, list(row.values()))
+        cursor.execute(sql, [to_null(value) for value in row.values()])
 
 def upsert_run(conn: Any, run: "Run", /) -> None:
     """Insert the run row, or update it if it was already inserted."""
@@ -343,7 +285,12 @@ def upsert_run(conn: Any, run: "Run", /) -> None:
         cursor.execute(sql, list(row.values()))
 
 
+def to_null(value: Any, /) -> Any:
+    """Turn a float NaN into None (NULL in the database); keep the rest."""
+    if isinstance(value, float) and math.isnan(value):
+        return None
 
+    return value
 
 def to_real(value: Any, /) -> float | None:
     """Convert to float, turning NaN into None (NULL in the database)."""
