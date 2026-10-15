@@ -21,7 +21,9 @@ SUBREF_DX_FORMAT = re.compile(r"set\s+x\s+([0-9.+-]+)")
 SUBREF_DZ_FORMAT = re.compile(r"set\s+z\s+([0-9.+-]+)")
 TIME_FORMAT = "%y%m%d%H%M%S.%f"
 TZ = ZoneInfo("Asia/Tokyo")
-
+# Optional keys found missing in a COSMOS response so far. Each is
+# warned about only once, not in every control period.
+_missing_keys: set[str] = set()
 
 class Cosmos:
     """COSMOS client for the Nobeyama 45m telescope.
@@ -154,10 +156,10 @@ class State:
         try:
             return cls(
                 wind_speed=float(fields["wind"]),
-                wind_direction=float(fields["dir"]),
+                wind_direction=get_optional(fields, "dir"),
                 temperature=float(fields["tmp"]),
                 elevation=float(fields["el"]),
-                azimuth=float(fields["az"]),
+                azimuth=get_optional(fields, "az"),
                 time=datetime.strptime(fields["time"], TIME_FORMAT).replace(tzinfo=TZ),
             )
         except KeyError as error:
@@ -271,3 +273,22 @@ def get_socket(*, host: str = "127.0.0.1", port: int = 11111) -> socket:
     sock = socket(AF_INET, SOCK_STREAM)
     sock.connect((host, port))
     return sock
+
+def get_optional(fields: dict[str, str], key: str, /) -> float:
+    """Return the value of an optional key, or NaN if it is missing.
+
+    The first time a key is missing, a warning lists the keys COSMOS did
+    report, so that a wrong key name can be spotted in the log.
+
+    """
+    if key in fields:
+        return float(fields[key])
+
+    if key not in _missing_keys:
+        LOGGER.warning(
+            f"COSMOS did not report {key!r}; NaN is used instead. "
+            f"Reported keys: {sorted(fields)}"
+        )
+        _missing_keys.add(key)
+
+    return float("nan")
