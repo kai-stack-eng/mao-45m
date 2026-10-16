@@ -11,13 +11,12 @@ from pathlib import Path
 from time import sleep
 from warnings import catch_warnings, simplefilter
 
-
 # dependencies
 import numpy as np
 import xarray as xr
 from ndtools import Range
 from tqdm import tqdm
-from .convert import get_converter as get_subref_converter, get_epl_offsets
+from .convert import get_converter as get_subref_converter, get_epl_offsets, CONTROLLER
 from .records import Control, Run
 from ..cosmos import get_cosmos
 from ..database import get_database
@@ -26,7 +25,6 @@ from ..vdif import FRAMES_PER_SAMPLE
 from ..vdif.convert import get_samples_faster as get_samples
 from ..vdif.receive import get_frames
 from ..utils import log, take, to_datetime, to_timedelta
-
 
 # constants
 LOGGER = getLogger(__name__)
@@ -59,10 +57,13 @@ def control(
     proportional_gain_dZ: float = 0.1,
     anti_windup_gain_dX: float = 10,
     anti_windup_gain_dZ: float = 10,
+    time_constant_dX: float = 0.2,
+    time_constant_dZ: float = 0.2,
     range_dX: tuple[float, float] = (-0.038, 0.038),  # m
     range_dZ: tuple[float, float] = (-0.019, 0.019),  # m
     range_ddX: tuple[float, float] = (0.00005, 0.000375),  # m
     range_ddZ: tuple[float, float] = (0.00005, 0.000300),  # m
+    controller: CONTROLLER = "AWPI",
     # options for network connection
     cosmos_host: str = "127.0.0.1",
     cosmos_port: int = 11111,
@@ -116,10 +117,13 @@ def control(
             integral_gain_dZ=integral_gain_dZ,
             anti_windup_gain_dX=anti_windup_gain_dX,
             anti_windup_gain_dZ=anti_windup_gain_dZ,
+            time_constant_dX=time_constant_dX,
+            time_constant_dZ=time_constant_dZ,
             range_dX=range_dX,
             range_dZ=range_dZ,
             range_ddX=range_ddX,
             range_ddZ=range_ddZ,
+            controller=controller,
         )
 
         # create the EPL offset schedule
@@ -183,13 +187,19 @@ def control(
                             epl_offset = None
 
                         # estimate the current subref parameters
-                        subref = get_subref(epl, epl_cal, epl_offset=epl_offset)
+                        subref = get_subref(
+                            epl,
+                            epl_cal,
+                            epl_offset=epl_offset,
+                            drive_amount_dX=state.dX,
+                            drive_amount_dZ=state.dZ,
+                        )
 
                                                # send the subref control to COSMOS
                         if not dry_run:
                             cosmos.send_subref(
-                                dX=float(subref.sel(drive="X")),
-                                dZ=float(subref.sel(drive="Z")),
+                                dX=subref.u[0],
+                                dZ=subref.u[1],
                             )
 
                         # write the state, EPL and subref to the database (optional)
