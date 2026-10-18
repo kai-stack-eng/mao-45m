@@ -24,6 +24,7 @@ from ..utils import to_timedelta
 if TYPE_CHECKING:
     import xarray as xr
     from ..cosmos import State
+    from .convert import ControllerState
 
 
 # constants
@@ -58,7 +59,7 @@ class Control:
         state: "State",
         epl: "xr.DataArray",
         epl_cal: "xr.DataArray",
-        subref: "xr.DataArray",
+        subref: "ControllerState",
         sent: bool,
     ) -> Self:
         """Create the record of one control period.
@@ -68,27 +69,30 @@ class Control:
             epl: Estimated EPL (in m; feed).
             epl_cal: Estimated EPL at calibration (in m; feed).
                 Only its time is stored.
-            subref: Subreflector parameters (in m; drive).
-            sent: Whether the parameters were sent to COSMOS
-                (False in a dry run).
+            subref: Result of the controller in this period. Only u
+                (the offsets to be sent) is stored: when the controller
+                holds its output, the rest of it is from an earlier
+                period, so the EPL is taken from epl instead.
+            sent: Whether the offsets were sent to COSMOS.
 
         """
-        feeds = set(epl.feed.values.tolist())
-
-        def get_epl(feed: str, /) -> float | None:
-            return float(epl.sel(feed=feed)) if feed in feeds else None
+        # feed names may be in either case (e.g. "c" or "C")
+        epls = {
+            str(feed).lower(): float(epl.sel(feed=feed))
+            for feed in epl.feed.values.tolist()
+        }
 
         return cls(
             time=get_time(epl),
             cosmos_time=state.time,
             cal_time=get_time(epl_cal),
-            epl_c=get_epl("c"),
-            epl_t=get_epl("t"),
-            epl_r=get_epl("r"),
-            epl_b=get_epl("b"),
-            epl_l=get_epl("l"),
-            dx=float(subref.sel(drive="X")),
-            dz=float(subref.sel(drive="Z")),
+            epl_c=epls.get("c"),
+            epl_t=epls.get("t"),
+            epl_r=epls.get("r"),
+            epl_b=epls.get("b"),
+            epl_l=epls.get("l"),
+            dx=float(subref.u[0]),
+            dz=float(subref.u[1]),
             sent=sent,
         )
 @dataclass(frozen=True)
