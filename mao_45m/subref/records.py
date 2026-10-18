@@ -120,6 +120,9 @@ class Run:
     control_period: float  # s
     epl_interval_tolerance: float
     epl_offset_schedule: str | None
+    controller: str
+    time_constant_dx: float  # s
+    time_constant_dz: float  # s
     integral_gain_dx: float
     integral_gain_dz: float
     proportional_gain_dx: float
@@ -163,6 +166,9 @@ class Run:
             control_period=to_seconds(args["control_period"]),
             epl_interval_tolerance=float(args["epl_interval_tolerance"]),
             epl_offset_schedule=None if schedule is None else str(schedule),
+            controller=str(args["controller"]),
+            time_constant_dx=float(args["time_constant_dX"]),
+            time_constant_dz=float(args["time_constant_dZ"]),
             integral_gain_dx=float(args["integral_gain_dX"]),
             integral_gain_dz=float(args["integral_gain_dZ"]),
             proportional_gain_dx=float(args["proportional_gain_dX"]),
