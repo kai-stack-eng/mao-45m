@@ -21,6 +21,10 @@ SUBREF_DX_FORMAT = re.compile(r"set\s+x\s+([0-9.+-]+)")
 SUBREF_DZ_FORMAT = re.compile(r"set\s+z\s+([0-9.+-]+)")
 TIME_FORMAT = "%y%m%d%H%M%S.%f"
 TZ = ZoneInfo("Asia/Tokyo")
+# Keys of the subreflector position (in mm) in the pullwte response.
+# PROVISIONAL: confirm the names and the unit with the COSMOS team.
+SUBREF_DX_KEY = "subx"
+SUBREF_DZ_KEY = "subz"
 # Optional keys found missing in a COSMOS response so far. Each is
 # warned about only once, not in every control period.
 _missing_keys: set[str] = set()
@@ -146,6 +150,8 @@ class State:
     temperature: float
     elevation: float
     azimuth: float
+    dX: float
+    dZ: float
     time: datetime
 
     @classmethod
@@ -160,6 +166,8 @@ class State:
                 temperature=float(fields["tmp"]),
                 elevation=float(fields["el"]),
                 azimuth=get_optional(fields, "az"),
+                dX=1e-3 * get_optional(fields, SUBREF_DX_KEY),
+                dZ=1e-3 * get_optional(fields, SUBREF_DZ_KEY),
                 time=datetime.strptime(fields["time"], TIME_FORMAT).replace(tzinfo=TZ),
             )
         except KeyError as error:
