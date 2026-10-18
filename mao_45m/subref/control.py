@@ -196,11 +196,17 @@ def control(
                         )
 
                                                # send the subref control to COSMOS
-                        if not dry_run:
+                        # send the subref control to COSMOS, but never a NaN
+                        # (e.g. D-PAWPI without the subref position from COSMOS)
+                        sent = not dry_run and bool(np.isfinite(subref.u).all())
+
+                        if sent:
                             cosmos.send_subref(
                                 dX=subref.u[0],
                                 dZ=subref.u[1],
                             )
+                        elif not dry_run:
+                            LOGGER.warning(f"Subref control not sent: {subref.u}")
 
                         # write the state, EPL and subref to the database (optional)
                         if db is not None:
@@ -211,7 +217,7 @@ def control(
                                     epl=epl,
                                     epl_cal=epl_cal,
                                     subref=subref,
-                                    sent=not dry_run,
+                                    sent=sent,
                                 ),
                             )
                         # append aggregated, EPL, subref data (optional)
