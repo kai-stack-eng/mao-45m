@@ -16,7 +16,7 @@ import numpy as np
 import xarray as xr
 from ndtools import Range
 from tqdm import tqdm
-from .convert import get_converter as get_subref_converter, get_epl_offsets, CONTROLLER
+from .convert import get_converter as get_subref_converter, get_epl_offsets, CONTROLLER, ControllerState
 from .records import Control, Run
 from ..cosmos import get_cosmos
 from ..database import get_database
@@ -228,7 +228,7 @@ def control(
                             epls.append(epl)
 
                         if subref_data is not None:
-                            subrefs.append(subref)
+                            subrefs.append(get_subref_dataarray(subref))
 
                         # update the progress bar
                         bar.update(1)
@@ -264,3 +264,16 @@ def save_dataarray(da: xr.DataArray, zarr: PathLike[str] | str, /) -> Path:
             da.to_zarr(zarr, mode="w", encoding=encoding)
 
     return Path(zarr).expanduser().resolve()
+
+def get_subref_dataarray(subref: ControllerState, /) -> xr.DataArray:
+    """Convert the controller result to the subref data saved to Zarr.
+
+    The saved data keep the form they had before the controllers returned
+    a ControllerState: the offsets to be sent (in m; drive) with a time.
+
+    """
+    return xr.DataArray(
+        subref.u,
+        dims="drive",
+        coords={"drive": ["X", "Z"], "time": subref.time},
+    )
