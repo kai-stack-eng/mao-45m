@@ -154,8 +154,8 @@ class Converter:
 
         tc = float(to_timedelta(self.control_period) / SECOND)
 
-        epl_np = epl.sel(feed=self.feed_order).to_numpy()
-        epl_cal_np = epl_cal.sel(feed=self.feed_order).to_numpy()
+        epl_np = select_feeds(epl, self.feed_order).to_numpy()
+        epl_cal_np = select_feeds(epl_cal, self.feed_order).to_numpy()
 
         q = (
             epl_np
@@ -177,7 +177,7 @@ class Converter:
         )
 
         if epl_offset is not None:
-            w = epl_offset.sel(feed=self.feed_order).drop_vars("time").to_numpy()
+            w = select_feeds(epl_offset, self.feed_order).drop_vars("time").to_numpy()
             q = q + w
 
             LOGGER.debug(
@@ -569,3 +569,13 @@ def saturate_subref_control(
         u[1] = range_dZ[1]
 
     return u
+
+def select_feeds(da: xr.DataArray, feed_order: list[str], /) -> xr.DataArray:
+    """Select the feeds in given order, ignoring the case of the feed names.
+
+    The feed names of the feed model are upper case (see get_feed_order),
+    while those of the EPL follow the feed pattern, which may be either.
+
+    """
+    upper = [str(feed).upper() for feed in da.feed.values]
+    return da.assign_coords(feed=upper).sel(feed=feed_order)
