@@ -41,6 +41,11 @@ mao-45m = "mao_45m:main"
 [project.urls]
 repository = "https://github.com/mao-wfs/mao-45m"
 
+[project.optional-dependencies]
+monitor = [
+    "psycopg[binary]>=3.1",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

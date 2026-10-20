@@ -1,0 +1,49 @@
+name: nobeyama-monitor
+
+services:
+  db:
+    image: timescale/timescaledb:latest-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nobeyama}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nobeyama}
+      POSTGRES_DB: ${POSTGRES_DB:-nobeyama}
+    volumes:
+      # named volume: survives `docker compose down`
+      - db-data:/var/lib/postgresql/data
+      # runs only on first initialisation of the volume
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro,Z
+    ports:
+      # only for psql from the same machine; remove to close it off
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nobeyama}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_MIN_REFRESH_INTERVAL: 1s
+      POSTGRES_USER: ${POSTGRES_USER:-nobeyama}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nobeyama}
+      POSTGRES_DB: ${POSTGRES_DB:-nobeyama}
+    volumes:
+      # dashboards live here; without this they vanish on recreate
+      - grafana-data:/var/lib/grafana
+      
+    ports:
+      # reachable from the other PC on the LAN
+      - "${GRAFANA_PORT:-3000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+
+volumes:
+  db-data:
+  grafana-data:

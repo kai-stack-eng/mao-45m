@@ -4,6 +4,7 @@ __all__ = ["control"]
 # standard library
 from collections import deque
 from collections.abc import Sequence
+from contextlib import nullcontext
 from logging import getLogger
 from os import PathLike
 from pathlib import Path
@@ -15,8 +16,10 @@ import numpy as np
 import xarray as xr
 from ndtools import Range
 from tqdm import tqdm
-from .convert import get_converter as get_subref_converter, get_epl_offsets, CONTROLLER
+from .convert import get_converter as get_subref_converter, get_epl_offsets, CONTROLLER, ControllerState
+from .records import Control, Run
 from ..cosmos import get_cosmos
+from ..database import get_database
 from ..epl.convert import get_aggregated, get_converter as get_epl_converter
 from ..vdif import FRAMES_PER_SAMPLE
 from ..vdif.convert import get_samples_faster as get_samples
@@ -76,6 +79,7 @@ def control(
     epl_data_max: int | None = None,
     subref_data: PathLike[str] | str | None = None,
     subref_data_max: int | None = None,
+    database: bool = False,
     # options for logging
     log_file: PathLike[str] | str | None = None,
     log_file_level: int | str = "INFO",
@@ -83,13 +87,15 @@ def control(
     log_stderr_level: int | str = "WARNING",
 ) -> None:
     """Control the subreflector of the Nobeyama 45m telescope by MAO."""
+    params = dict(locals())
+
     with log(
         file=log_file,
         file_level=log_file_level,
         stderr=log_stderr,
         stderr_level=log_stderr_level,
     ):
-        for key, val in locals().items():
+        for key, val in params.items():
             LOGGER.debug(f"{key}: {val!r}")
 
         # define the frame size for each EPL estimate
@@ -126,10 +132,12 @@ def control(
         else:
             epl_offsets = None
 
+
         with (
             tqdm(disable=not status, unit="EPL") as bar,
             get_cosmos(host=cosmos_host, port=cosmos_port, safe=cosmos_safe) as cosmos,
             get_frames(frame_size * 2, group=vdif_group, port=vdif_port) as frames,
+            get_database() if database else nullcontext() as db,
         ):
             # wait until enough frames are buffered
             while len(frames.get(frame_size)) != frame_size:
@@ -142,6 +150,9 @@ def control(
             # start the subref control
             LOGGER.info("Subreflector control started.")
             control_origin = to_datetime(control_origin)
+            # record the start of this run (optional)
+            if db is not None:
+                db.start_run(Run.from_args(params | {"control_origin": control_origin}))
 
             try:
                 for _ in range(epl_size):
@@ -184,13 +195,31 @@ def control(
                             drive_amount_dZ=state.dZ,
                         )
 
-                        # send the subref control to COSMOS
-                        if not dry_run:
+                                               # send the subref control to COSMOS
+                        # send the subref control to COSMOS, but never a NaN
+                        # (e.g. D-PAWPI without the subref position from COSMOS)
+                        sent = not dry_run and bool(np.isfinite(subref.u).all())
+
+                        if sent:
                             cosmos.send_subref(
                                 dX=subref.u[0],
                                 dZ=subref.u[1],
                             )
+                        elif not dry_run:
+                            LOGGER.warning(f"Subref control not sent: {subref.u}")
 
+                        # write the state, EPL and subref to the database (optional)
+                        if db is not None:
+                            db.write(
+                                state=state,
+                                control=Control.from_cycle(
+                                    state=state,
+                                    epl=epl,
+                                    epl_cal=epl_cal,
+                                    subref=subref,
+                                    sent=sent,
+                                ),
+                            )
                         # append aggregated, EPL, subref data (optional)
                         if aggregated_data is not None:
                             aggs.append(aggregated)
@@ -199,7 +228,7 @@ def control(
                             epls.append(epl)
 
                         if subref_data is not None:
-                            subrefs.append(subref)
+                            subrefs.append(get_subref_dataarray(subref))
 
                         # update the progress bar
                         bar.update(1)
@@ -235,3 +264,16 @@ def save_dataarray(da: xr.DataArray, zarr: PathLike[str] | str, /) -> Path:
             da.to_zarr(zarr, mode="w", encoding=encoding)
 
     return Path(zarr).expanduser().resolve()
+
+def get_subref_dataarray(subref: ControllerState, /) -> xr.DataArray:
+    """Convert the controller result to the subref data saved to Zarr.
+
+    The saved data keep the form they had before the controllers returned
+    a ControllerState: the offsets to be sent (in m; drive) with a time.
+
+    """
+    return xr.DataArray(
+        subref.u,
+        dims="drive",
+        coords={"drive": ["X", "Z"], "time": subref.time},
+    )
