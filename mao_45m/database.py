@@ -23,7 +23,7 @@ __all__ = ["Database", "get_database"]
 
 # standard library
 import math
-import os    
+import os
 from dataclasses import asdict, fields, replace
 from datetime import datetime, timezone
 from logging import getLogger
@@ -58,8 +58,6 @@ STATE_TABLES: dict[str, tuple[str, ...]] = {
 }
 
 
-
-
 class Database:
     """Database writer for the subreflector control loop.
 
@@ -70,7 +68,7 @@ class Database:
 
     def __init__(self, dsn: str, /) -> None:
         try:
-            import psycopg
+            import psycopg  # pyright: ignore[reportMissingImports]
         except ImportError as error:
             raise ImportError(
                 "psycopg is needed to write to the database. "
@@ -124,7 +122,7 @@ class Database:
 
         self.recovered()
         return True
-    
+
     def start_run(self, run: "Run", /) -> None:
         """Record the start of a control run in the run table. Never raises.
 
@@ -220,7 +218,7 @@ class Database:
                 pass
 
             self.conn = None
-            
+
     def __enter__(self) -> "Database":
         """Enter the context manager."""
         return self
@@ -242,7 +240,6 @@ def get_database() -> Database:
     return Database(dsn)
 
 
-
 def get_state_rows(state: State, /) -> dict[str, dict[str, Any]]:
     """Build one row per table in STATE_TABLES."""
     values = asdict(state)
@@ -257,7 +254,6 @@ def get_state_rows(state: State, /) -> dict[str, dict[str, Any]]:
     return rows
 
 
-
 def insert(conn: Any, table: str, row: dict[str, Any], /) -> None:
     """Insert one row, ignoring one whose time is already there."""
     columns = ", ".join(row)
@@ -269,6 +265,7 @@ def insert(conn: Any, table: str, row: dict[str, Any], /) -> None:
 
     with conn.cursor() as cursor:
         cursor.execute(sql, [to_null(value) for value in row.values()])
+
 
 def upsert_run(conn: Any, run: "Run", /) -> None:
     """Insert the run row, or update it if it was already inserted."""
@@ -292,6 +289,7 @@ def to_null(value: Any, /) -> Any:
 
     return value
 
+
 def to_real(value: Any, /) -> float | None:
     """Convert to float, turning NaN into None (NULL in the database)."""
     value = float(value)
@@ -304,7 +302,9 @@ def check_state_tables() -> None:
     names = {field.name for field in fields(State)}
 
     if missing := stored - names:
-        LOGGER.warning(f"STATE_TABLES names that are not State fields: {sorted(missing)}")
+        LOGGER.warning(
+            f"STATE_TABLES names that are not State fields: {sorted(missing)}"
+        )
 
     if extra := names - stored:
         LOGGER.warning(f"State fields that are not stored: {sorted(extra)}")
