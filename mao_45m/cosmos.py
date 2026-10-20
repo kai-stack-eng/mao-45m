@@ -9,26 +9,25 @@ from logging import getLogger
 from socket import AF_INET, SOCK_STREAM, socket
 from zoneinfo import ZoneInfo
 
-
 # dependencies
 from typing_extensions import Self
-
 
 # constants
 ABSMAX_DX = 0.048  # m
 ABSMAX_DZ = 0.024  # m
 LOGGER = getLogger(__name__)
-STATE_FORMAT = re.compile(
-    r"wind:\s+([0-9.+-]+)\s+"
-    r"tmp:\s+([0-9.+-]+)\s+"
-    r"el:\s+([0-9.+-]+)\s+"
-    r"time:\s+([0-9.+-]+)"
-)
+FIELD_FORMAT = re.compile(r"(\w+):\s*([0-9.eE+-]+)")
 SUBREF_DX_FORMAT = re.compile(r"set\s+x\s+([0-9.+-]+)")
 SUBREF_DZ_FORMAT = re.compile(r"set\s+z\s+([0-9.+-]+)")
 TIME_FORMAT = "%y%m%d%H%M%S.%f"
 TZ = ZoneInfo("Asia/Tokyo")
-
+# Keys of the subreflector position (in mm) in the pullwte response.
+# PROVISIONAL: confirm the names and the unit with the COSMOS team.
+SUBREF_DX_KEY = "subx"
+SUBREF_DZ_KEY = "subz"
+# Optional keys found missing in a COSMOS response so far. Each is
+# warned about only once, not in every control period.
+_missing_keys: set[str] = set()
 
 class Cosmos:
     """COSMOS client for the Nobeyama 45m telescope.
@@ -97,13 +96,13 @@ class Cosmos:
         cmd_dX = f"{cmd} x {1e3 * dX}"
         LOGGER.debug(cmd_dX)
         self.sock.send((cmd_dX + "\n").encode())
-        resp_dX = self.sock.recv(64)
+        resp_dX = self.sock.recv(1024)
 
         # dZ after m to mm conversion will be sent
         cmd_dZ = f"{cmd} z {1e3 * dZ}"
         LOGGER.debug(cmd_dZ)
         self.sock.send((cmd_dZ + "\n").encode())
-        resp_dZ = self.sock.recv(64)
+        resp_dZ = self.sock.recv(1024)
 
         # dX and dZ after mm to m will be stored
         return Subref.from_cosmos(resp_dX, resp_dZ)
@@ -121,7 +120,7 @@ class Cosmos:
 
         LOGGER.debug(cmd)
         self.sock.send((cmd + "\n").encode())
-        resp = self.sock.recv(64)
+        resp = self.sock.recv(1024)
 
         return State.from_cosmos(resp)
 
@@ -147,22 +146,34 @@ class State:
     """
 
     wind_speed: float
+    wind_direction: float
     temperature: float
     elevation: float
+    azimuth: float
+    dX: float
+    dZ: float
     time: datetime
 
     @classmethod
     def from_cosmos(cls, resp: bytes, /) -> Self:
         """Parse the current state from the COSMOS response."""
-        if (match := STATE_FORMAT.search(resp.decode())) is None:
-            raise ValueError("Could not parse the COSMOS response.")
+        fields = dict(FIELD_FORMAT.findall(resp.decode()))
 
-        return cls(
-            wind_speed=float(match[1]),
-            temperature=float(match[2]),
-            elevation=float(match[3]),
-            time=datetime.strptime(match[4], TIME_FORMAT).replace(tzinfo=TZ),
-        )
+        try:
+            return cls(
+                wind_speed=float(fields["wind"]),
+                wind_direction=get_optional(fields, "dir"),
+                temperature=float(fields["tmp"]),
+                elevation=float(fields["el"]),
+                azimuth=get_optional(fields, "az"),
+                dX=1e-3 * get_optional(fields, SUBREF_DX_KEY),
+                dZ=1e-3 * get_optional(fields, SUBREF_DZ_KEY),
+                time=datetime.strptime(fields["time"], TIME_FORMAT).replace(tzinfo=TZ),
+            )
+        except KeyError as error:
+            raise ValueError(
+                f"Could not parse the COSMOS response: {resp!r}"
+            ) from error
 
 
 @dataclass(frozen=True)
@@ -270,3 +281,22 @@ def get_socket(*, host: str = "127.0.0.1", port: int = 11111) -> socket:
     sock = socket(AF_INET, SOCK_STREAM)
     sock.connect((host, port))
     return sock
+
+def get_optional(fields: dict[str, str], key: str, /) -> float:
+    """Return the value of an optional key, or NaN if it is missing.
+
+    The first time a key is missing, a warning lists the keys COSMOS did
+    report, so that a wrong key name can be spotted in the log.
+
+    """
+    if key in fields:
+        return float(fields[key])
+
+    if key not in _missing_keys:
+        LOGGER.warning(
+            f"COSMOS did not report {key!r}; NaN is used instead. "
+            f"Reported keys: {sorted(fields)}"
+        )
+        _missing_keys.add(key)
+
+    return float("nan")
