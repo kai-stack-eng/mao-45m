@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from typing_extensions import Self
 from ..utils import to_timedelta
+
 if TYPE_CHECKING:
     import xarray as xr
     from ..cosmos import State
@@ -29,6 +30,7 @@ if TYPE_CHECKING:
 
 # constants
 SECOND = np.timedelta64(1, "s")
+
 
 @dataclass(frozen=True)
 class Control:
@@ -95,6 +97,8 @@ class Control:
             dz=float(subref.u[1]),
             sent=sent,
         )
+
+
 @dataclass(frozen=True)
 class Run:
     """One row of the run table: the settings of one control run.
@@ -185,6 +189,7 @@ class Run:
             range_ddz_max=float(args["range_ddZ"][1]),
         )
 
+
 def get_time(da: "xr.DataArray", /) -> datetime | None:
     """Return the time coordinate (naive UTC) as an aware datetime."""
     if "time" not in da.coords:
@@ -193,6 +198,7 @@ def get_time(da: "xr.DataArray", /) -> datetime | None:
     # datetime64[ns].item() gives an int, so go through [us] first
     value = da.coords["time"].values.astype("datetime64[us]").item()
     return None if value is None else value.replace(tzinfo=timezone.utc)
+
 
 def to_seconds(value: Any, /) -> float:
     """Convert a time length (e.g. "10 s", "2 hr" or 0.5) to seconds."""

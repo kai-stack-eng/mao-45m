@@ -29,6 +29,7 @@ SUBREF_DZ_KEY = "subz"
 # warned about only once, not in every control period.
 _missing_keys: set[str] = set()
 
+
 class Cosmos:
     """COSMOS client for the Nobeyama 45m telescope.
 
@@ -281,6 +282,7 @@ def get_socket(*, host: str = "127.0.0.1", port: int = 11111) -> socket:
     sock = socket(AF_INET, SOCK_STREAM)
     sock.connect((host, port))
     return sock
+
 
 def get_optional(fields: dict[str, str], key: str, /) -> float:
     """Return the value of an optional key, or NaN if it is missing.

@@ -16,7 +16,12 @@ import numpy as np
 import xarray as xr
 from ndtools import Range
 from tqdm import tqdm
-from .convert import get_converter as get_subref_converter, get_epl_offsets, CONTROLLER, ControllerState
+from .convert import (
+    get_converter as get_subref_converter,
+    get_epl_offsets,
+    CONTROLLER,
+    ControllerState,
+)
 from .records import Control, Run
 from ..cosmos import get_cosmos
 from ..database import get_database
@@ -132,7 +137,6 @@ def control(
         else:
             epl_offsets = None
 
-
         with (
             tqdm(disable=not status, unit="EPL") as bar,
             get_cosmos(host=cosmos_host, port=cosmos_port, safe=cosmos_safe) as cosmos,
@@ -195,7 +199,7 @@ def control(
                             drive_amount_dZ=state.dZ,
                         )
 
-                                               # send the subref control to COSMOS
+                        # send the subref control to COSMOS
                         # send the subref control to COSMOS, but never a NaN
                         # (e.g. D-PAWPI without the subref position from COSMOS)
                         sent = not dry_run and bool(np.isfinite(subref.u).all())
@@ -264,6 +268,7 @@ def save_dataarray(da: xr.DataArray, zarr: PathLike[str] | str, /) -> Path:
             da.to_zarr(zarr, mode="w", encoding=encoding)
 
     return Path(zarr).expanduser().resolve()
+
 
 def get_subref_dataarray(subref: ControllerState, /) -> xr.DataArray:
     """Convert the controller result to the subref data saved to Zarr.

@@ -570,6 +570,7 @@ def saturate_subref_control(
 
     return u
 
+
 def select_feeds(da: xr.DataArray, feed_order: list[str], /) -> xr.DataArray:
     """Select the feeds in given order, ignoring the case of the feed names.
 
