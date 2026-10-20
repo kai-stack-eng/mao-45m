@@ -1,65 +1,41 @@
 {
   "__inputs": [
     {
-      "name": "DS_NOBEYAMA",
-      "label": "PostgreSQL (monitor db)",
-      "description": "The PostgreSQL data source of the monitor database",
+      "name": "DS_GRAFANA-POSTGRESQL-DATASOURCE",
+      "label": "grafana-postgresql-datasource",
+      "description": "",
       "type": "datasource",
       "pluginId": "grafana-postgresql-datasource",
       "pluginName": "PostgreSQL"
     }
   ],
+  "__elements": {},
   "__requires": [
     {
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "10.0.0"
+      "version": "13.2.3"
     },
     {
       "type": "datasource",
       "id": "grafana-postgresql-datasource",
       "name": "PostgreSQL",
-      "version": "1.0.0"
-    },
-    {
-      "type": "panel",
-      "id": "timeseries",
-      "name": "Time series",
-      "version": ""
+      "version": "13.0.4"
     },
     {
       "type": "panel",
       "id": "table",
       "name": "Table",
       "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "Time series",
+      "version": ""
     }
   ],
-  "title": "MAO 45m monitor",
-  "uid": "mao-45m-monitor",
-  "tags": [
-    "mao-45m"
-  ],
-  "timezone": "browser",
-  "editable": true,
-  "graphTooltip": 1,
-  "schemaVersion": 39,
-  "version": 2,
-  "time": {
-    "from": "now-15m",
-    "to": "now"
-  },
-  "refresh": "1s",
-  "timepicker": {
-    "refresh_intervals": [
-      "1s",
-      "5s",
-      "10s",
-      "30s",
-      "1m",
-      "5m"
-    ]
-  },
   "annotations": {
     "list": [
       {
@@ -75,40 +51,727 @@
         "type": "dashboard"
       },
       {
-        "name": "Control runs",
-        "enable": true,
-        "iconColor": "orange",
         "datasource": {
           "type": "grafana-postgresql-datasource",
-          "uid": "${DS_NOBEYAMA}"
+          "uid": "${DS_GRAFANA-POSTGRESQL-DATASOURCE}"
         },
+        "enable": false,
+        "hide": false,
+        "iconColor": "orange",
+        "name": "Control runs",
         "target": {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${DS_NOBEYAMA}"
-          },
+          "dataset": "nobeyama",
           "editorMode": "code",
           "format": "table",
+          "limit": 100,
+          "matchAny": false,
           "rawQuery": true,
-          "rawSql": "SELECT started_at AS time,\n  format('%s, Kp %s / %s, Ki %s / %s, cal %s s, %s',\n    controller,\n    proportional_gain_dx, proportional_gain_dz,\n    integral_gain_dx, integral_gain_dz,\n    cal_interval,\n    CASE WHEN dry_run THEN 'dry run' ELSE 'sent to COSMOS' END\n  ) AS text\nFROM run\nWHERE $__timeFilter(started_at)",
-          "refId": "Anno"
+          "rawSql": "SELECT started_at AS time,\r\n  format('%s, Kp %s / %s, Ki %s / %s, cal %s s, %s',\r\n    controller,\r\n    proportional_gain_dx, proportional_gain_dz,\r\n    integral_gain_dx, integral_gain_dz,\r\n    cal_interval,\r\n    CASE WHEN dry_run THEN 'dry run' ELSE 'sent to COSMOS' END\r\n  ) AS text\r\nFROM run\r\nWHERE $__timeFilter(started_at)",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          },
+          "tags": [],
+          "type": "dashboard"
         }
       }
     ]
   },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_GRAFANA-POSTGRESQL-DATASOURCE}"
+      },
+      "description": "control table; relative to the reference spectrum (cal_time)",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "lengthmm"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "13.2.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_GRAFANA-POSTGRESQL-DATASOURCE}"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "-- $shift = on: move the latest run's VDIF time to now (replay tests only)\nWITH s AS (\n  SELECT CASE WHEN '$shift' = 'on'\n    THEN (SELECT now() - max(time) FROM control\n          WHERE cosmos_time = (SELECT max(cosmos_time) FROM control))\n    ELSE interval '0' END AS d\n)\nSELECT c.time + s.d AS time,\n  c.epl_c * 1e3 AS \"C\", c.epl_t * 1e3 AS \"T\", c.epl_r * 1e3 AS \"R\",\n  c.epl_b * 1e3 AS \"B\", c.epl_l * 1e3 AS \"L\"\nFROM control c, s\nWHERE ('$shift' = 'off' AND $__timeFilter(c.time))\n   OR ('$shift' = 'on' AND c.time + s.d BETWEEN $__timeFrom() AND $__timeTo())\nORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "EPL",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_GRAFANA-POSTGRESQL-DATASOURCE}"
+      },
+      "description": "control table; values computed by the controller (sent only when control.sent is true). A flat line for a long time while the EPL moves means the output is held.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "lengthmm"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "13.2.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_GRAFANA-POSTGRESQL-DATASOURCE}"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "-- $shift = on: move the latest run's VDIF time to now (replay tests only)\nWITH s AS (\n  SELECT CASE WHEN '$shift' = 'on'\n    THEN (SELECT now() - max(time) FROM control\n          WHERE cosmos_time = (SELECT max(cosmos_time) FROM control))\n    ELSE interval '0' END AS d\n)\nSELECT c.time + s.d AS time,\n  c.dx * 1e3 AS \"dX\", c.dz * 1e3 AS \"dZ\"\nFROM control c, s\nWHERE ('$shift' = 'off' AND $__timeFilter(c.time))\n   OR ('$shift' = 'on' AND c.time + s.d BETWEEN $__timeFrom() AND $__timeTo())\nORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Subreflector offsets (dX, dZ)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_GRAFANA-POSTGRESQL-DATASOURCE}"
+      },
+      "description": "cosmos table",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "always",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "degree"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 17
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "13.2.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_GRAFANA-POSTGRESQL-DATASOURCE}"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT time, elevation, azimuth\nFROM cosmos\nWHERE $__timeFilter(time)\nORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "title": "Elevation / azimuth",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_GRAFANA-POSTGRESQL-DATASOURCE}"
+      },
+      "description": "cosmos table",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "always",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "velocityms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 17
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "13.2.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_GRAFANA-POSTGRESQL-DATASOURCE}"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT time, wind_speed AS \"wind speed\"\nFROM cosmos\nWHERE $__timeFilter(time)\nORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "title": "Wind speed",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_GRAFANA-POSTGRESQL-DATASOURCE}"
+      },
+      "description": "cosmos table",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "always",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "degree"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 25
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "13.2.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_GRAFANA-POSTGRESQL-DATASOURCE}"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT time, wind_direction AS \"wind direction\"\nFROM cosmos\nWHERE $__timeFilter(time)\nORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "title": "Wind direction",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_GRAFANA-POSTGRESQL-DATASOURCE}"
+      },
+      "description": "cosmos table",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "always",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "celsius"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 25
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "13.2.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_GRAFANA-POSTGRESQL-DATASOURCE}"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT time, temperature\nFROM cosmos\nWHERE $__timeFilter(time)\nORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "title": "Temperature",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_GRAFANA-POSTGRESQL-DATASOURCE}"
+      },
+      "description": "run table, all columns; newest first. Times are in s, lengths in m and frequencies in Hz. finished_at empty: running, or killed before it could record the end. Scroll sideways to see all columns.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false,
+            "minWidth": 130
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "id": 7,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true
+      },
+      "pluginVersion": "13.2.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_GRAFANA-POSTGRESQL-DATASOURCE}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "-- all columns, so that new ones show up without editing\nSELECT *\nFROM run\nORDER BY started_at DESC\nLIMIT 20",
+          "refId": "A"
+        }
+      ],
+      "title": "Control runs",
+      "type": "table"
+    }
+  ],
+  "preload": false,
+  "refresh": "1s",
+  "schemaVersion": 42,
+  "tags": [
+    "mao-45m"
+  ],
   "templating": {
     "list": [
       {
-        "name": "shift",
-        "label": "Shift VDIF time to now (replay tests only)",
-        "type": "custom",
-        "query": "off,on",
-        "hide": 0,
+        "allowCustomValue": true,
         "current": {
-          "selected": true,
           "text": "off",
           "value": "off"
         },
+        "includeAll": false,
+        "label": "Shift VDIF time to now (replay tests only)",
+        "name": "shift",
         "options": [
           {
             "selected": true,
@@ -120,347 +783,30 @@
             "text": "on",
             "value": "on"
           }
-        ]
+        ],
+        "query": "off,on",
+        "type": "custom",
+        "valuesFormat": "csv"
       }
     ]
   },
-  "panels": [
-    {
-      "id": 1,
-      "type": "timeseries",
-      "title": "EPL",
-      "description": "control table; relative to the reference spectrum (cal_time)",
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "${DS_NOBEYAMA}"
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 24,
-        "x": 0,
-        "y": 0
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "lengthmm",
-          "custom": {
-            "lineInterpolation": "linear",
-            "showPoints": "auto",
-            "pointSize": 4,
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${DS_NOBEYAMA}"
-          },
-          "editorMode": "code",
-          "format": "time_series",
-          "rawQuery": true,
-          "rawSql": "-- $shift = on: move the latest run's VDIF time to now (replay tests only)\nWITH s AS (\n  SELECT CASE WHEN '$shift' = 'on'\n    THEN (SELECT now() - max(time) FROM control\n          WHERE cosmos_time = (SELECT max(cosmos_time) FROM control))\n    ELSE interval '0' END AS d\n)\nSELECT c.time + s.d AS time,\n  c.epl_c * 1e3 AS \"C\", c.epl_t * 1e3 AS \"T\", c.epl_r * 1e3 AS \"R\",\n  c.epl_b * 1e3 AS \"B\", c.epl_l * 1e3 AS \"L\"\nFROM control c, s\nWHERE ('$shift' = 'off' AND $__timeFilter(c.time))\n   OR ('$shift' = 'on' AND c.time + s.d BETWEEN $__timeFrom() AND $__timeTo())\nORDER BY 1",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 2,
-      "type": "timeseries",
-      "title": "Subreflector offsets (dX, dZ)",
-      "description": "control table; values computed by the controller (sent only when control.sent is true). A flat line for a long time while the EPL moves means the output is held.",
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "${DS_NOBEYAMA}"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 9
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "lengthmm",
-          "custom": {
-            "lineInterpolation": "stepAfter",
-            "showPoints": "auto",
-            "pointSize": 4,
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${DS_NOBEYAMA}"
-          },
-          "editorMode": "code",
-          "format": "time_series",
-          "rawQuery": true,
-          "rawSql": "-- $shift = on: move the latest run's VDIF time to now (replay tests only)\nWITH s AS (\n  SELECT CASE WHEN '$shift' = 'on'\n    THEN (SELECT now() - max(time) FROM control\n          WHERE cosmos_time = (SELECT max(cosmos_time) FROM control))\n    ELSE interval '0' END AS d\n)\nSELECT c.time + s.d AS time,\n  c.dx * 1e3 AS \"dX\", c.dz * 1e3 AS \"dZ\"\nFROM control c, s\nWHERE ('$shift' = 'off' AND $__timeFilter(c.time))\n   OR ('$shift' = 'on' AND c.time + s.d BETWEEN $__timeFrom() AND $__timeTo())\nORDER BY 1",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 3,
-      "type": "timeseries",
-      "title": "Elevation / azimuth",
-      "description": "cosmos table",
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "${DS_NOBEYAMA}"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 17
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "degree",
-          "custom": {
-            "lineInterpolation": "linear",
-            "showPoints": "always",
-            "pointSize": 4,
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${DS_NOBEYAMA}"
-          },
-          "editorMode": "code",
-          "format": "time_series",
-          "rawQuery": true,
-          "rawSql": "SELECT time, elevation, azimuth\nFROM cosmos\nWHERE $__timeFilter(time)\nORDER BY time",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 4,
-      "type": "timeseries",
-      "title": "Wind speed",
-      "description": "cosmos table",
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "${DS_NOBEYAMA}"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 17
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "velocityms",
-          "custom": {
-            "lineInterpolation": "linear",
-            "showPoints": "always",
-            "pointSize": 4,
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${DS_NOBEYAMA}"
-          },
-          "editorMode": "code",
-          "format": "time_series",
-          "rawQuery": true,
-          "rawSql": "SELECT time, wind_speed AS \"wind speed\"\nFROM cosmos\nWHERE $__timeFilter(time)\nORDER BY time",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 5,
-      "type": "timeseries",
-      "title": "Wind direction",
-      "description": "cosmos table",
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "${DS_NOBEYAMA}"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 25
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "degree",
-          "custom": {
-            "lineInterpolation": "linear",
-            "showPoints": "always",
-            "pointSize": 4,
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${DS_NOBEYAMA}"
-          },
-          "editorMode": "code",
-          "format": "time_series",
-          "rawQuery": true,
-          "rawSql": "SELECT time, wind_direction AS \"wind direction\"\nFROM cosmos\nWHERE $__timeFilter(time)\nORDER BY time",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 6,
-      "type": "timeseries",
-      "title": "Temperature",
-      "description": "cosmos table",
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "${DS_NOBEYAMA}"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 25
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "celsius",
-          "custom": {
-            "lineInterpolation": "linear",
-            "showPoints": "always",
-            "pointSize": 4,
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${DS_NOBEYAMA}"
-          },
-          "editorMode": "code",
-          "format": "time_series",
-          "rawQuery": true,
-          "rawSql": "SELECT time, temperature\nFROM cosmos\nWHERE $__timeFilter(time)\nORDER BY time",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 7,
-      "type": "table",
-      "title": "Control runs",
-      "description": "run table; newest first. finished_at empty: running, or killed before it could record the end.",
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "${DS_NOBEYAMA}"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 33
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "options": {
-        "showHeader": true,
-        "cellHeight": "sm"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${DS_NOBEYAMA}"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT started_at AS \"started\", finished_at AS \"finished\",\n  controller, dry_run AS \"dry run\",\n  proportional_gain_dx AS \"Kp dX\", proportional_gain_dz AS \"Kp dZ\",\n  integral_gain_dx AS \"Ki dX\", integral_gain_dz AS \"Ki dZ\",\n  cal_interval AS \"cal [s]\", error\nFROM run\nORDER BY started_at DESC\nLIMIT 20",
-          "refId": "A"
-        }
-      ]
-    }
-  ]
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "1s",
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m"
+    ]
+  },
+  "timezone": "browser",
+  "title": "MAO 45m monitor",
+  "uid": "mao-45m-monitor",
+  "version": 6,
+  "weekStart": ""
 }
