@@ -4,7 +4,7 @@ __all__ = ["Cosmos", "State", "Subref", "get_cosmos", "get_socket", "receive", "
 # standard library
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from logging import getLogger
 from socket import AF_INET, SOCK_STREAM, socket
 from zoneinfo import ZoneInfo
@@ -21,10 +21,9 @@ SUBREF_DX_FORMAT = re.compile(r"set\s+x\s+([0-9.+-]+)")
 SUBREF_DZ_FORMAT = re.compile(r"set\s+z\s+([0-9.+-]+)")
 TIME_FORMAT = "%y%m%d%H%M%S.%f"
 TZ = ZoneInfo("Asia/Tokyo")
-# Keys of the subreflector position (in mm) in the pullwte response.
-# PROVISIONAL: confirm the names and the unit with the COSMOS team.
-SUBREF_DX_KEY = "subx"
-SUBREF_DZ_KEY = "subz"
+# wind_time (HH:MM:SS.ffffff, no date) in the pullwtaexz response.
+# Read separately because FIELD_FORMAT would split it at the colons.
+WIND_TIME_FORMAT = re.compile(r"wind_time:\s*(\d{1,2}):(\d{2}):(\d{2}(?:\.\d*)?)")
 # Optional keys found missing in a COSMOS response so far. Each is
 # warned about only once, not in every control period.
 _missing_keys: set[str] = set()
@@ -107,7 +106,7 @@ class Cosmos:
         # dX and dZ after mm to m will be stored
         return Subref.from_cosmos(resp_dX, resp_dZ)
 
-    def receive_state(self, *, cmd: str = "pullwte") -> "State":
+    def receive_state(self, *, cmd: str = "pullwtaexz") -> "State":
         """Receive the state of the Nobeyama 45m telescope.
 
         Args:
@@ -138,37 +137,51 @@ class State:
     """Current state of the Nobeyama 45m telescope.
 
     Args:
-        wind_speed: Wind speed (in m s^-1).
-        temp: Ambient temperature (in deg C).
+        wind_speed: Maximum wind speed in the last minute (in m s^-1).
+        wind_direction: Wind direction at that time (in deg).
+        wind_time: Time of the wind and temperature (timezone-aware).
+        temperature: Ambient temperature (in deg C).
         elevation: Elevation angle of the telescope (in deg).
-        time: Timestamp of the state (timezone-aware).
+        azimuth: Azimuth angle of the telescope (in deg).
+        dX: Subreflector X reported by COSMOS (in m).
+        dZ1: Subreflector Z1 reported by COSMOS (in m).
+        dZ2: Subreflector Z2 reported by COSMOS (in m).
+        time: Time of the antenna and subref values (timezone-aware).
 
     """
 
     wind_speed: float
     wind_direction: float
+    wind_time: datetime | None
     temperature: float
     elevation: float
     azimuth: float
     dX: float
-    dZ: float
+    dZ1: float
+    dZ2: float
     time: datetime
 
     @classmethod
     def from_cosmos(cls, resp: bytes, /) -> Self:
         """Parse the current state from the COSMOS response."""
-        fields = dict(FIELD_FORMAT.findall(resp.decode()))
+        text = resp.decode()
+        wind_time = WIND_TIME_FORMAT.search(text)
+        fields = dict(FIELD_FORMAT.findall(WIND_TIME_FORMAT.sub("", text)))
 
         try:
+            time = datetime.strptime(fields["time"], TIME_FORMAT).replace(tzinfo=TZ)
+
             return cls(
-                wind_speed=float(fields["wind"]),
-                wind_direction=get_optional(fields, "dir"),
+                wind_speed=float(fields["wind_speed"]),
+                wind_direction=get_optional(fields, "wind_dir"),
+                wind_time=get_wind_time(wind_time, time),
                 temperature=float(fields["tmp"]),
                 elevation=float(fields["el"]),
                 azimuth=get_optional(fields, "az"),
-                dX=1e-3 * get_optional(fields, SUBREF_DX_KEY),
-                dZ=1e-3 * get_optional(fields, SUBREF_DZ_KEY),
-                time=datetime.strptime(fields["time"], TIME_FORMAT).replace(tzinfo=TZ),
+                dX=1e-3 * get_optional(fields, "x"),
+                dZ1=1e-3 * get_optional(fields, "z1"),
+                dZ2=1e-3 * get_optional(fields, "z2"),
+                time=time,
             )
         except KeyError as error:
             raise ValueError(
@@ -227,7 +240,7 @@ def get_cosmos(
 
 def receive(
     *,
-    cmd: str = "pullwte",
+    cmd: str = "pullwtaexz",
     host: str = "127.0.0.1",
     port: int = 11111,
 ) -> State:
@@ -300,3 +313,33 @@ def get_optional(fields: dict[str, str], key: str, /) -> float:
         _missing_keys.add(key)
 
     return float("nan")
+
+def get_wind_time(
+    match: "re.Match[str] | None", time: datetime, /
+) -> datetime | None:
+    """Return wind_time as a datetime on the date of time.
+
+    wind_time has only the clock, so the date of time is used, moved by
+    a day if that puts it more than 12 hours away (around midnight).
+    None (warned about once) if COSMOS did not report it.
+
+    """
+    if match is None:
+        if "wind_time" not in _missing_keys:
+            LOGGER.warning(
+                "COSMOS did not report 'wind_time'; weather is not stored."
+            )
+            _missing_keys.add("wind_time")
+
+        return None
+
+    wind_time = time.replace(
+        hour=int(match[1]), minute=int(match[2]), second=0, microsecond=0
+    ) + timedelta(seconds=float(match[3]))
+
+    if wind_time - time > timedelta(hours=12):
+        wind_time -= timedelta(days=1)
+    elif time - wind_time > timedelta(hours=12):
+        wind_time += timedelta(days=1)
+
+    return wind_time

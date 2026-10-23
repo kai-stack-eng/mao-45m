@@ -7,29 +7,49 @@ CREATE EXTENSION IF NOT EXISTS timescaledb;
 
 
 -- ---------------------------------------------------------------------
--- weather: values from the meteorological station.
--- The station is believed to update once a minute, so a fast poll loop
--- will see the same row repeatedly; the primary key drops those.
+-- weather: wind and temperature from COSMOS (pullwtaexz).
+-- COSMOS updates them about once a minute; time is wind_time, so the
+-- primary key keeps one row per update.
 -- ---------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS cosmos (
-    time        TIMESTAMPTZ NOT NULL,
-    wind_speed  REAL,
+CREATE TABLE IF NOT EXISTS weather (
+    time           TIMESTAMPTZ NOT NULL,
+    wind_speed     REAL,
     wind_direction REAL,
-    temperature REAL,
-    elevation      REAL,
-    azimuth        REAL,
+    temperature    REAL,
     PRIMARY KEY (time)
 );
 
-SELECT create_hypertable('cosmos', 'time', if_not_exists => TRUE);
+SELECT create_hypertable('weather', 'time', if_not_exists => TRUE);
 
-COMMENT ON TABLE  cosmos             IS 'COSMOS state readings';
-COMMENT ON COLUMN cosmos.time        IS 'Observation time reported by COSMOS';
-COMMENT ON COLUMN cosmos.wind_speed  IS 'm/s';
-COMMENT ON COLUMN cosmos.wind_direction IS 'degree; NULL if COSMOS does not report it';
-COMMENT ON COLUMN cosmos.temperature IS 'degree Celsius';
-COMMENT ON COLUMN cosmos.elevation      IS 'degree';
-COMMENT ON COLUMN cosmos.azimuth        IS 'degree; NULL if COSMOS does not report it';
+COMMENT ON TABLE  weather                IS 'Wind and temperature from COSMOS, about once a minute';
+COMMENT ON COLUMN weather.time           IS 'wind_time reported by COSMOS';
+COMMENT ON COLUMN weather.wind_speed     IS 'm/s; maximum in the last minute';
+COMMENT ON COLUMN weather.wind_direction IS 'degree; at the time of the maximum';
+COMMENT ON COLUMN weather.temperature    IS 'degree Celsius';
+
+-- ---------------------------------------------------------------------
+-- antenna: antenna angles and subreflector X, Z1, Z2 from COSMOS.
+-- time is the time of these values reported by COSMOS.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS antenna (
+    time      TIMESTAMPTZ NOT NULL,
+    elevation REAL,
+    azimuth   REAL,
+    dx        REAL,
+    dz1       REAL,
+    dz2       REAL,
+    PRIMARY KEY (time)
+);
+
+SELECT create_hypertable('antenna', 'time', if_not_exists => TRUE);
+
+COMMENT ON TABLE  antenna           IS 'Antenna angles and subreflector X, Z1, Z2 from COSMOS';
+COMMENT ON COLUMN antenna.time      IS 'Time of the values reported by COSMOS';
+COMMENT ON COLUMN antenna.elevation IS 'degree';
+COMMENT ON COLUMN antenna.azimuth   IS 'degree';
+COMMENT ON COLUMN antenna.dx        IS 'm; subreflector X reported by COSMOS';
+COMMENT ON COLUMN antenna.dz1       IS 'm; subreflector Z1 reported by COSMOS';
+COMMENT ON COLUMN antenna.dz2       IS 'm; subreflector Z2 reported by COSMOS';
 
 -- ---------------------------------------------------------------------
 -- control: one row per subreflector control period (0.5 s), written by
@@ -131,10 +151,14 @@ COMMENT ON TABLE run IS 'Settings of each control run (times in s, lengths in m,
 -- Compression. Harmless at this data rate, and it keeps things tidy if
 -- the collector is ever left running for months.
 -- ---------------------------------------------------------------------
-ALTER TABLE cosmos  SET (timescaledb.compress);
+ALTER TABLE weather SET (timescaledb.compress);
+
+ALTER TABLE antenna SET (timescaledb.compress);
 
 ALTER TABLE control SET (timescaledb.compress);
 
-SELECT add_compression_policy('cosmos',  INTERVAL '30 days', if_not_exists => TRUE);
+SELECT add_compression_policy('weather', INTERVAL '30 days', if_not_exists => TRUE);
+
+SELECT add_compression_policy('antenna', INTERVAL '30 days', if_not_exists => TRUE);
 
 SELECT add_compression_policy('control', INTERVAL '30 days', if_not_exists => TRUE);
