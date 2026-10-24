@@ -40,14 +40,14 @@ class ControllerState:
     """State of the subreflector controller.
 
     Args:
-        epl: EPL (feed; in m), ordered as B (Bottom), C (Center), L (Left),
-            R (Right), T (Top).
+        epl: EPL (feed; in m), ordered as b (bottom), c (center), l (left),
+            r (right), t (top).
         time: Time of the EPL.
-        epl_cal: EPL at calibration (feed; in m), ordered as B, C, L, R, T.
+        epl_cal: EPL at calibration (feed; in m), ordered as b, c, l, r, t.
         cal_time: Time of the EPL at calibration.
-        w: Artificial disturbance (feed; in m), ordered as B, C, L, R, T.
-        q: Estimated residual (q; feed; in m), ordered as B, C, L, R, T.
-        r: Projected estimated residual (r; feed; in m), ordered as B, C, L, R, T.
+        w: Artificial disturbance (feed; in m), ordered as b, c, l, r, t.
+        q: Estimated residual (q; feed; in m), ordered as b, c, l, r, t.
+        r: Projected estimated residual (r; feed; in m), ordered as b, c, l, r, t.
         xi: Estimated actuation coefficient (xi; drive; in m), ordered as X, Z.
         u: Drive command (u; drive; in m), ordered as X, Z.
         p: Drive amount, measured for D-PAWPI or estimated for M-PAWPI
@@ -469,7 +469,7 @@ def get_feed_order(feed_model: PathLike[str] | str, /) -> list[str]:
     """
     df = pd.read_csv(feed_model, comment="#", index_col=0, skipinitialspace=True)
 
-    return sorted(df.index.str.upper())
+    return sorted(df.index)
 
 
 def get_homologous_epl(
@@ -490,7 +490,6 @@ def get_homologous_epl(
 
     """
     df = pd.read_csv(feed_model, comment="#", index_col=0, skipinitialspace=True)
-    df.index = df.index.str.upper()
     df = df.loc[sorted(df.index)]
     a = df["homologous_EPL_A"].to_numpy()[:, np.newaxis]
     b = df["homologous_EPL_B"].to_numpy()[:, np.newaxis]
@@ -516,7 +515,6 @@ def get_measurement_matrix(feed_model: PathLike[str] | str, /) -> np.ndarray:
 
     """
     df = pd.read_csv(feed_model, comment="#", index_col=0, skipinitialspace=True)
-    df.index = df.index.str.upper()
     df = df.loc[sorted(df.index)]
 
     return np.array([df["EPL_over_dX"], df["EPL_over_dZ"]]).T
@@ -529,7 +527,6 @@ def get_projection_matrix(
 ) -> np.ndarray:
     """Get the projection matrix (P; feed_proj x feed)."""
     df = pd.read_csv(feed_model, comment="#", index_col=0, skipinitialspace=True)
-    df.index = df.index.str.upper()
     df = df.loc[sorted(df.index)]
     n_feed = len(df.index)
 
