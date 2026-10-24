@@ -241,6 +241,10 @@ class Converter:
                 v=v,
             )
 
+            if np.isnan(current.u).any():
+                LOGGER.warning(f"u={current.u} contains NaN.")
+                return self.on_failure(current)
+
             if abs(dX := current.u[0]) > ABSMAX_DX:
                 LOGGER.warning(f"{dX=} is out of range (|dX| <= {ABSMAX_DX}).")
                 return self.on_failure(current)
@@ -296,6 +300,10 @@ class Converter:
         )
 
         dt = (current.time - self.last.time) / SECOND
+
+        if np.isnan(current.u).any():
+            LOGGER.warning(f"u={current.u} contains NaN.")
+            return self.on_failure(current)
 
         if abs(dX := current.u[0]) > ABSMAX_DX:
             LOGGER.warning(f"{dX=} is out of range (|dX| <= {ABSMAX_DX}).")
