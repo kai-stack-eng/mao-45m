@@ -10,6 +10,7 @@ __all__ = [
     "get_proportional_gain",
     "get_projection_matrix",
     "get_time_constant",
+    "get_zernike_matrix",
     "interp_homologous_epl",
     "saturate_subref_control",
 ]
@@ -26,11 +27,13 @@ from typing import get_args, Literal
 import numpy as np
 import pandas as pd
 import xarray as xr
+from poppy.zernike import zernike
 from ..cosmos import ABSMAX_DX, ABSMAX_DZ
 from ..utils import to_timedelta
 
 # constants
 LOGGER = getLogger(__name__)
+NRO45M_DIAMETER = 45.0  # m
 SECOND = np.timedelta64(1, "s")
 CONTROLLER = Literal["AWPI", "P-AWPI", "M-PAWPI", "D-PAWPI"]
 
@@ -47,6 +50,8 @@ class ControllerState:
         cal_time: Time of the EPL at calibration.
         w: Artificial disturbance (feed; in m), ordered as b, c, l, r, t.
         q: Estimated residual (q; feed; in m), ordered as b, c, l, r, t.
+        z: Estimated Zernike expansion coefficient (z; modes; in m) ordered as
+            Z00, Z1-1, Z11, Z20.
         r: Projected estimated residual (r; feed; in m), ordered as b, c, l, r, t.
         xi: Estimated actuation coefficient (xi; drive; in m), ordered as X, Z.
         u: Drive command (u; drive; in m), ordered as X, Z.
@@ -63,6 +68,7 @@ class ControllerState:
     cal_time: np.datetime64
     w: np.ndarray
     q: np.ndarray
+    z: np.ndarray
     r: np.ndarray
     xi: np.ndarray
     u: np.ndarray
@@ -80,6 +86,7 @@ class Converter:
         G_elevation: Elevations of the homologous EPL (elevation; in deg).
         M: Measurement matrix (M; feed x drive).
         P: Projection matrix (P; feed x feed).
+        Z: Zernike polynomial matrix (Z; feed x modes).
         K_I: Integral gain (K_I; drive).
         K_P: Proportional gain (K_P; drive).
         K_a: Anti-windup gain (K_a; drive).
@@ -102,6 +109,7 @@ class Converter:
     G_elevation: np.ndarray
     M: np.ndarray
     P: np.ndarray
+    Z: np.ndarray
     K_I: np.ndarray
     K_P: np.ndarray
     K_a: np.ndarray
@@ -125,6 +133,11 @@ class Converter:
         """Pre-calculated (PM^T PM)^-1 PM^T (drive x feed)."""
         PM = self.P @ self.M
         return np.linalg.inv(PM.T @ PM) @ PM.T
+
+    @cached_property
+    def inv_ZTZ_ZT(self) -> np.ndarray:
+        """Pre-calculated (Z^T Z)^-1 Z^T (modes x feed)."""
+        return np.linalg.inv(self.Z.T @ self.Z) @ self.Z.T
 
     def __call__(
         self,
@@ -188,6 +201,8 @@ class Converter:
         else:
             w = np.full(q.shape, np.nan)
 
+        z = self.inv_ZTZ_ZT @ q
+
         r = self.P @ q
 
         xi = self.inv_PMTPM_PMT @ r
@@ -233,6 +248,7 @@ class Converter:
                 cal_time=epl_cal.time.data,
                 w=w,
                 q=q,
+                z=z,
                 r=r,
                 xi=xi,
                 u=u,
@@ -291,6 +307,7 @@ class Converter:
             cal_time=epl_cal.time.data,
             w=w,
             q=q,
+            z=z,
             r=r,
             xi=xi,
             u=u,
@@ -423,6 +440,7 @@ def get_converter(
         G_elevation=G_elevation,
         M=get_measurement_matrix(feed_model),
         P=get_projection_matrix(feed_model, controller),
+        Z=get_zernike_matrix(feed_model),
         K_I=get_integral_gain(integral_gain_dX, integral_gain_dZ),
         K_P=get_proportional_gain(proportional_gain_dX, proportional_gain_dZ),
         K_a=get_anti_windup_gain(anti_windup_gain_dX, anti_windup_gain_dZ),
@@ -544,6 +562,32 @@ def get_proportional_gain(dX: float, dZ: float, /) -> np.ndarray:
 def get_time_constant(dX: float, dZ: float, /) -> np.ndarray:
     """Get the time constant matrix (T_s; drive) from given values."""
     return np.array([dX, dZ])
+
+
+def get_zernike_matrix(feed_model: PathLike[str] | str, /) -> np.ndarray:
+    """Get the Zernike polynomial matrix (Z; feed x modes) from given feed model.
+
+    Args:
+        feed_model: Path to the feed model CSV file.
+
+    Returns:
+        Zernike polynomial matrix (Z; feed x modes). The column components are sorted
+        as Z00, Z1-1, Z11, Z20.
+
+    """
+    df = pd.read_csv(feed_model, comment="#", index_col=0, skipinitialspace=True)
+    df = df.loc[sorted(df.index)]
+    rho = df["position_radius"] / (NRO45M_DIAMETER / 2)
+    theta = np.deg2rad(df["position_angle"])
+
+    return np.array(
+        [
+            zernike(0, 0, rho=rho, theta=theta, noll_normalize=False),
+            zernike(1, -1, rho=rho, theta=theta, noll_normalize=False),
+            zernike(1, 1, rho=rho, theta=theta, noll_normalize=False),
+            zernike(2, 0, rho=rho, theta=theta, noll_normalize=False),
+        ]
+    ).T
 
 
 def interp_homologous_epl(
