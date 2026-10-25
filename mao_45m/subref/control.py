@@ -219,6 +219,7 @@ def control(
                                     epl_cal=epl_cal,
                                     subref=subref,
                                     sent=sent,
+                                    feed_order=get_subref.feed_order,
                                 ),
                             )
                         # append aggregated, EPL, subref data (optional)

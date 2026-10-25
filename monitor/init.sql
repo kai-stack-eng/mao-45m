@@ -69,6 +69,14 @@ CREATE TABLE IF NOT EXISTS control (
     dx          REAL,
     dz          REAL,
     sent        BOOLEAN,
+    epl_offset_c REAL, epl_offset_t REAL, epl_offset_r REAL, epl_offset_b REAL, epl_offset_l REAL,
+    q_c REAL, q_t REAL, q_r REAL, q_b REAL, q_l REAL,
+    z_1 REAL, z_2 REAL, z_3 REAL, z_4 REAL,
+    r_c REAL, r_t REAL, r_r REAL, r_b REAL, r_l REAL,
+    xi_x REAL, xi_z REAL,
+    d_x REAL, d_z REAL,
+    v_x REAL, v_z REAL,
+    p_x REAL, p_z REAL,
     PRIMARY KEY (time)
 );
 

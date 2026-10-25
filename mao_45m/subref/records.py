@@ -51,6 +51,37 @@ class Control:
     dx: float  # m
     dz: float  # m
     sent: bool
+    # values of the controller (ControllerState) in m, or m s for v;
+    # in a cycle where the controller held its output, these are from
+    # an earlier cycle (the same values as in the row before)
+    epl_offset_c: float | None
+    epl_offset_t: float | None
+    epl_offset_r: float | None
+    epl_offset_b: float | None
+    epl_offset_l: float | None
+    q_c: float | None
+    q_t: float | None
+    q_r: float | None
+    q_b: float | None
+    q_l: float | None
+    z_1: float # Z00: piston
+    z_2: float # Z11: horizontal tilt
+    z_3: float # Z1-1: vertical tilt
+    z_4: float # Z20: defocus
+    r_c: float | None
+    r_t: float | None
+    r_r: float | None
+    r_b: float | None
+    r_l: float | None
+    r_l: float | None
+    xi_x: float
+    xi_z: float
+    d_x: float
+    d_z: float
+    v_x: float # m s
+    v_z: float # m s
+    p_x: float
+    p_z: float
 
     @classmethod
     def from_cycle(
@@ -60,6 +91,7 @@ class Control:
         epl: "xr.DataArray",
         epl_cal: "xr.DataArray",
         subref: "ControllerState",
+        feed_order: list[str],
         sent: bool,
     ) -> Self:
         """Create the record of one control period.
@@ -74,6 +106,9 @@ class Control:
                 holds its output, the rest of it is from an earlier
                 period, so the EPL is taken from epl instead.
             sent: Whether the offsets were sent to COSMOS.
+            feed_order: Feed names in the order of the controller's
+                arrays (Converter.feed_order).
+
 
         """
         # feed names may be in either case (e.g. "c" or "C")
@@ -81,6 +116,11 @@ class Control:
             str(feed).lower(): float(epl.sel(feed=feed))
             for feed in epl.feed.values.tolist()
         }
+
+
+        w = by_feed(subref.w, feed_order)
+        q = by_feed(subref.q, feed_order)
+        r = by_feed(subref.r, feed_order)
 
         return cls(
             time=get_time(epl),
@@ -94,6 +134,34 @@ class Control:
             dx=float(subref.u[0]),
             dz=float(subref.u[1]),
             sent=sent,
+            epl_offset_c=w.get("c"),
+            epl_offset_t=w.get("t"),
+            epl_offset_r=w.get("r"),
+            epl_offset_b=w.get("b"),
+            epl_offset_l=w.get("l"),
+            q_c=q.get("c"),
+            q_t=q.get("t"),
+            q_r=q.get("r"),
+            q_b=q.get("b"),
+            q_l=q.get("l"),
+            # subref.z is ordered as Z00, Z1-1, Z11, Z20
+            z_1=float(subref.z[0]),
+            z_2=float(subref.z[2]),
+            z_3=float(subref.z[1]),
+            z_4=float(subref.z[3]),
+            r_c=r.get("c"),
+            r_t=r.get("t"),
+            r_r=r.get("r"),
+            r_b=r.get("b"),
+            r_l=r.get("l"),
+            xi_x=float(subref.xi[0]),
+            xi_z=float(subref.xi[1]),
+            d_x=float(subref.d[0]),
+            d_z=float(subref.d[1]),
+            v_x=float(subref.v[0]),
+            v_z=float(subref.v[1]),
+            p_x=float(subref.p[0]),
+            p_z=float(subref.p[1]),
         )
 @dataclass(frozen=True)
 class Run:
@@ -184,6 +252,11 @@ class Run:
             range_ddz_min=float(args["range_ddZ"][0]),
             range_ddz_max=float(args["range_ddZ"][1]),
         )
+
+def by_feed(values: Any, feed_order: list[str], /) -> dict[str, float]:
+    """Map values ordered as feed_order to lower-case feed names."""
+    return {str(feed).lower(): float(value) for feed, value in zip(feed_order, values)}
+
 
 def get_time(da: "xr.DataArray", /) -> datetime | None:
     """Return the time coordinate (naive UTC) as an aware datetime."""
