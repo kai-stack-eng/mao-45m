@@ -622,9 +622,11 @@ def saturate_subref_control(
 def select_feeds(da: xr.DataArray, feed_order: list[str], /) -> xr.DataArray:
     """Select the feeds in given order, ignoring the case of the feed names.
 
-    The feed names of the feed model are upper case (see get_feed_order),
-    while those of the EPL follow the feed pattern, which may be either.
+    The feed names of the feed model (see get_feed_order) and those of
+    the EPL, which follow the feed pattern, may be in either case.
 
     """
-    upper = [str(feed).upper() for feed in da.feed.values]
-    return da.assign_coords(feed=upper).sel(feed=feed_order)
+    lower = [str(feed).lower() for feed in da.feed.values]
+    return da.assign_coords(feed=lower).sel(
+        feed=[str(feed).lower() for feed in feed_order]
+    )
