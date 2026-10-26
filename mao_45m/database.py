@@ -45,15 +45,17 @@ CONNECT_TIMEOUT = 2  # s; libpq does not accept less
 STATEMENT_TIMEOUT = 200  # ms; per statement, well inside one control period
 RETRY_WAIT = 10.0  # s; wait after losing the connection before reconnecting
 
-# Which State field goes into which table. The names must match both the
-# State attributes and the database columns (see monitor/init.sql).
-STATE_TABLES: dict[str, tuple[str, ...]] = {
-    "cosmos": (
-        "wind_speed",
-        "wind_direction",
-        "temperature",
-        "elevation",
-        "azimuth",
+# Which State fields go into which table: (the field used as time,
+# the other columns). The names must match both the State attributes
+# and the database columns (see monitor/init.sql).
+STATE_TABLES: dict[str, tuple[str, tuple[str, ...]]] = {
+    "weather": (
+        "wind_time",
+        ("wind_speed", "wind_direction", "temperature"),
+    ),
+    "antenna": (
+        "time",
+        ("elevation", "azimuth", "dX", "dZ1", "dZ2"),
     ),
 }
 
@@ -245,8 +247,11 @@ def get_state_rows(state: State, /) -> dict[str, dict[str, Any]]:
     values = asdict(state)
     rows: dict[str, dict[str, Any]] = {}
 
-    for table, columns in STATE_TABLES.items():
-        rows[table] = {"time": values["time"]}
+    for table, (time, columns) in STATE_TABLES.items():
+        if values[time] is None:
+            continue
+
+        rows[table] = {"time": values[time]}
 
         for column in columns:
             rows[table][column] = to_real(values[column])
@@ -298,7 +303,9 @@ def to_real(value: Any, /) -> float | None:
 
 def check_state_tables() -> None:
     """Warn about mismatches between State and STATE_TABLES."""
-    stored = {"time"}.union(*STATE_TABLES.values())
+    stored = {
+        name for time, columns in STATE_TABLES.values() for name in (time, *columns)
+    }
     names = {field.name for field in fields(State)}
 
     if missing := stored - names:

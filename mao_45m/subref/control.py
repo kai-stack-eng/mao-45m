@@ -196,10 +196,10 @@ def control(
                             epl_cal,
                             epl_offset=epl_offset,
                             drive_amount_dX=state.dX,
-                            drive_amount_dZ=state.dZ,
+                            # Z1 and Z2 are close, so their mean is used as Z
+                            drive_amount_dZ=(state.dZ1 + state.dZ2) / 2,
                         )
 
-                        # send the subref control to COSMOS
                         # send the subref control to COSMOS, but never a NaN
                         # (e.g. D-PAWPI without the subref position from COSMOS)
                         sent = not dry_run and bool(np.isfinite(subref.u).all())
